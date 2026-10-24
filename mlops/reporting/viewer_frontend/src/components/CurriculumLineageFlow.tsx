@@ -13,8 +13,63 @@ export interface CanonicalPhaseDef {
   description?: string;
 }
 
+export const HIERARCHICAL_EZM_PHASES: CanonicalPhaseDef[] = [
+  {
+    phaseKey: "phase1_strategic_scout_unoccupied",
+    phaseTitle: "Strategic Scout & Fast Capture",
+    phaseNumber: 1,
+    stageName: "Stage 1: Spatial Strategic Modulation",
+    stageNumber: 1,
+    targetWinRate: 0.85,
+    targetCapturedAvg: 0.90,
+    targetVpTakeRate: 0.12,
+    description: "Spatial sub-goal assignment and capture sprint in open 3-VP map (vp_phase1_unoccupied_3hex)",
+  },
+  {
+    phaseKey: "phase2_suppression_and_assault",
+    phaseTitle: "Base of Fire & Suppression Assault",
+    phaseNumber: 2,
+    stageName: "Stage 1: Spatial Strategic Modulation",
+    stageNumber: 1,
+    targetWinRate: 0.40,
+    targetCapturedAvg: 0.40,
+    targetVpTakeRate: 0.012,
+    description: "Priolo hill crossing under Italian HMG & sniper crossfire (elemento_sorpresa_singolo)",
+  },
+  {
+    phaseKey: "phase3_bunker_hill_fortress_breach",
+    phaseTitle: "Bunker Hill Fortress Breach",
+    phaseNumber: 3,
+    stageName: "Stage 2: Fortified Combined Arms Mastery",
+    stageNumber: 2,
+    targetWinRate: 0.40,
+    targetCapturedAvg: 0.50,
+    description: "Frontal assault on S6B hill with pillboxes, wire, and radio outpost (bunker_hill_singolo)",
+  },
+  {
+    phaseKey: "phase4_tactical_mastery_battaglia_cittadina",
+    phaseTitle: "Tactical Mastery Battaglia Cittadina",
+    phaseNumber: 4,
+    stageName: "Stage 2: Fortified Combined Arms Mastery",
+    stageNumber: 2,
+    targetWinRate: 0.35,
+    targetCapturedAvg: 1.50,
+    description: "Full combined arms urban assault in Gela (14 vs 7 units, 5 VPs, engineers)",
+  },
+  {
+    phaseKey: "phase5_amphibious_beachhead_assault",
+    phaseTitle: "Amphibious Beachhead Assault",
+    phaseNumber: 5,
+    stageName: "Stage 2: Fortified Combined Arms Mastery",
+    stageNumber: 2,
+    targetWinRate: 0.40,
+    targetCapturedAvg: 1.50,
+    description: "Coastal landing under crossfire & barbed wire obstacles (mettete_i_piedi_terra_1)",
+  },
+];
+
 export const FULL_ASSAULT_CAMPAIGN_PHASES: CanonicalPhaseDef[] = [
-  // Stage 1: VP Acceleration & Objective Doctrine (5 Phases)
+  // Stage 1: VP Acceleration & Objective Doctrine (6 Phases)
   {
     phaseKey: "phase1_vp_sprint_unoccupied",
     phaseTitle: "Vp Sprint Unoccupied",
@@ -49,9 +104,20 @@ export const FULL_ASSAULT_CAMPAIGN_PHASES: CanonicalPhaseDef[] = [
     description: "Simultaneous 2v2 sprint race to disputed VPs",
   },
   {
-    phaseKey: "phase4_tactical_gela_mastery",
-    phaseTitle: "Tactical Gela Mastery",
+    phaseKey: "phase4_addestramento_fanteria_11_1",
+    phaseTitle: "Addestramento Fanteria (11.1)",
     phaseNumber: 4,
+    stageName: "Stage 1: Objective Doctrine",
+    stageNumber: 1,
+    targetWinRate: 0.50,
+    targetCapturedAvg: 0.85,
+    targetVpTakeRate: 0.040,
+    description: "Symmetric 3v3 sandbox (Rifles + HMG) on fortified S6",
+  },
+  {
+    phaseKey: "phase5_tactical_gela_mastery",
+    phaseTitle: "Tactical Gela Mastery",
+    phaseNumber: 5,
     stageName: "Stage 1: Objective Doctrine",
     stageNumber: 1,
     targetWinRate: 0.45,
@@ -60,22 +126,22 @@ export const FULL_ASSAULT_CAMPAIGN_PHASES: CanonicalPhaseDef[] = [
     description: "Full tactical mastery in Gela (14 units, 5 VPs)",
   },
   {
-    phaseKey: "phase5_urban_assault_pure_offensive",
+    phaseKey: "phase6_urban_assault_pure_offensive",
     phaseTitle: "Urban Assault Pure Offensive",
-    phaseNumber: 5,
+    phaseNumber: 6,
     stageName: "Stage 1: Objective Doctrine",
     stageNumber: 1,
     targetWinRate: 0.45,
     targetCapturedAvg: 2.20,
     targetVpTakeRate: 0.02,
-    description: "Attacker breakthrough in Battaglia Cittadina (T=10)",
+    description: "Attacker breakthrough in Battaglia Cittadina (T=8)",
   },
 
   // Stage 2: Multi-Scenario Progressive Self-Play vs Random (8 Phases)
   {
     phaseKey: "phase1_bootstrap",
     phaseTitle: "Bootstrap Multi-Map",
-    phaseNumber: 6,
+    phaseNumber: 7,
     stageName: "Stage 2: Multi-Scenario Self-Play",
     stageNumber: 2,
     targetWinRate: 0.60,
@@ -86,7 +152,7 @@ export const FULL_ASSAULT_CAMPAIGN_PHASES: CanonicalPhaseDef[] = [
   {
     phaseKey: "phase1_channel_adapt",
     phaseTitle: "Channel Adapt 38Ch",
-    phaseNumber: 7,
+    phaseNumber: 8,
     stageName: "Stage 2: Multi-Scenario Self-Play",
     stageNumber: 2,
     targetWinRate: 0.60,
@@ -97,7 +163,7 @@ export const FULL_ASSAULT_CAMPAIGN_PHASES: CanonicalPhaseDef[] = [
   {
     phaseKey: "phase1_refine_aggressive",
     phaseTitle: "Refine Aggressive",
-    phaseNumber: 8,
+    phaseNumber: 9,
     stageName: "Stage 2: Multi-Scenario Self-Play",
     stageNumber: 2,
     targetWinRate: 0.60,
@@ -108,7 +174,7 @@ export const FULL_ASSAULT_CAMPAIGN_PHASES: CanonicalPhaseDef[] = [
   {
     phaseKey: "phase2_mix_70_30",
     phaseTitle: "Mix 70% Self / 30% Random",
-    phaseNumber: 9,
+    phaseNumber: 10,
     stageName: "Stage 2: Multi-Scenario Self-Play",
     stageNumber: 2,
     targetWinRate: 0.60,
@@ -119,7 +185,7 @@ export const FULL_ASSAULT_CAMPAIGN_PHASES: CanonicalPhaseDef[] = [
   {
     phaseKey: "phase3_mix_50_50",
     phaseTitle: "Mix 50% Self / 50% Random",
-    phaseNumber: 10,
+    phaseNumber: 11,
     stageName: "Stage 2: Multi-Scenario Self-Play",
     stageNumber: 2,
     targetWinRate: 0.60,
@@ -130,7 +196,7 @@ export const FULL_ASSAULT_CAMPAIGN_PHASES: CanonicalPhaseDef[] = [
   {
     phaseKey: "phase4_mix_30_70",
     phaseTitle: "Mix 30% Self / 70% Random",
-    phaseNumber: 11,
+    phaseNumber: 12,
     stageName: "Stage 2: Multi-Scenario Self-Play",
     stageNumber: 2,
     targetWinRate: 0.62,
@@ -141,7 +207,7 @@ export const FULL_ASSAULT_CAMPAIGN_PHASES: CanonicalPhaseDef[] = [
   {
     phaseKey: "phase5_self_dominant_90_10",
     phaseTitle: "Self Dominant 90/10",
-    phaseNumber: 12,
+    phaseNumber: 13,
     stageName: "Stage 2: Multi-Scenario Self-Play",
     stageNumber: 2,
     targetWinRate: 0.64,
@@ -152,7 +218,7 @@ export const FULL_ASSAULT_CAMPAIGN_PHASES: CanonicalPhaseDef[] = [
   {
     phaseKey: "phase6_self_only_stabilize",
     phaseTitle: "Self-Play Stabilization 100%",
-    phaseNumber: 13,
+    phaseNumber: 14,
     stageName: "Stage 2: Multi-Scenario Self-Play",
     stageNumber: 2,
     targetWinRate: 0.66,
@@ -186,19 +252,39 @@ export function CurriculumLineageFlow({
   const latestStep = steps[steps.length - 1];
   const netEloGain = (latestStep?.elo ?? 0) - (initialStep?.elo ?? 0);
 
-  // Helper: Match a phase name to the canonical index (0 to 12)
+  // Detect whether this model ran the new H-EZ-M v3.0 Hierarchical Curriculum
+  const isHierarchicalEzm = React.useMemo(() => {
+    return steps.some((s) => {
+      const p = (s.phaseName || "").toLowerCase();
+      const c = (s.curriculumName || "").toLowerCase();
+      return (
+        c.includes("hierarchical") ||
+        p.includes("strategic_scout") ||
+        p.includes("suppression_and_assault") ||
+        p.includes("bunker_hill") ||
+        p.includes("phase4_tactical_mastery") ||
+        p.includes("amphibious_beachhead") ||
+        p.includes("mettete_i_piedi")
+      );
+    });
+  }, [steps]);
+
+  const activePhaseDefs = isHierarchicalEzm ? HIERARCHICAL_EZM_PHASES : FULL_ASSAULT_CAMPAIGN_PHASES;
+
+  // Helper: Match a phase name to the active phase index
   function matchCanonicalPhase(phaseName: string): number {
-    const rawLower = phaseName.toLowerCase();
+    const rawLower = (phaseName || "").toLowerCase();
     const cleanLower = rawLower.replace(/^phase\d*_?/, "").replace(/_v\d+.*$/, "");
-    return FULL_ASSAULT_CAMPAIGN_PHASES.findIndex((p) => {
+
+    return activePhaseDefs.findIndex((p) => {
       const pKeyLower = p.phaseKey.toLowerCase();
       const pClean = pKeyLower.replace(/^phase\d*_?/, "");
       return rawLower.includes(pKeyLower) || cleanLower.includes(pClean) || pKeyLower.includes(cleanLower);
     });
   }
 
-  // Canonical mapping: Map each of the 13 canonical phases 1-to-1
-  const canonicalItems = FULL_ASSAULT_CAMPAIGN_PHASES.map((def, cIdx) => {
+  // Canonical mapping: Map active curriculum phases 1-to-1
+  const canonicalItems = activePhaseDefs.map((def, cIdx) => {
     const matchingSteps = steps.filter((s) => matchCanonicalPhase(s.phaseName) === cIdx);
     if (matchingSteps.length === 0) {
       return {
@@ -230,7 +316,7 @@ export function CurriculumLineageFlow({
   });
 
   const canonicalExecutedCount = canonicalItems.filter((item) => item.isExecuted).length;
-  const canonicalPendingCount = FULL_ASSAULT_CAMPAIGN_PHASES.length - canonicalExecutedCount;
+  const canonicalPendingCount = activePhaseDefs.length - canonicalExecutedCount;
 
   // Group canonical items by sub-curriculum (Stage 1 and Stage 2)
   const canonicalStages = React.useMemo(() => {
@@ -247,13 +333,18 @@ export function CurriculumLineageFlow({
       const sNum = item.canonicalDef.stageNumber;
       if (!stageMap.has(sNum)) {
         const isStage1 = sNum === 1;
+        const stageName = isHierarchicalEzm
+          ? (isStage1 ? "Sub-Curriculum 1: Spatial Strategic Modulation" : "Sub-Curriculum 2: Fortified Combined Arms Mastery")
+          : (isStage1 ? "Sub-Curriculum 1: Objective Doctrine & VP Acceleration" : "Sub-Curriculum 2: Multi-Scenario Self-Play vs Random");
+        const stageDescription = isHierarchicalEzm
+          ? (isStage1 ? "Strategic target heatmap modulation, sprint & suppression assault (Phases 1–2)" : "Fortification breaching, urban mastery & amphibious landing (Phases 3–5)")
+          : (isStage1 ? "Fundamental VP sprint, suppression, race, symmetric sandbox & tactical urban assault (Phases 1–6)" : "Multi-scenario generalization (Gela + Mettete), 38Ch sensory adaptation & progressive selfplay (Phases 7–14)");
+
         stageMap.set(sNum, {
           stageNumber: sNum,
-          stageName: isStage1 ? "Sub-Curriculum 1: Objective Doctrine & VP Acceleration" : "Sub-Curriculum 2: Multi-Scenario Self-Play vs Random",
-          stageDescription: isStage1
-            ? "Fundamental VP sprint, suppression, race & tactical urban assault (Phases 1–5)"
-            : "Multi-scenario generalization (Gela + Mettete), 38Ch sensory adaptation & progressive selfplay (Phases 6–13)",
-          stageIcon: isStage1 ? "🎯" : "⚔️",
+          stageName,
+          stageDescription,
+          stageIcon: isStage1 ? "🎯" : (isHierarchicalEzm ? "🏰" : "⚔️"),
           accentColor: isStage1 ? "#f59e0b" : "#38bdf8",
           items: [],
         });
@@ -262,15 +353,19 @@ export function CurriculumLineageFlow({
     });
 
     return Array.from(stageMap.values()).sort((a, b) => a.stageNumber - b.stageNumber);
-  }, [canonicalItems]);
+  }, [canonicalItems, isHierarchicalEzm]);
 
   // Helper to match a chronological step to its stage number
   function getStepStageNumber(phaseName: string): number {
     const cIdx = matchCanonicalPhase(phaseName);
-    if (cIdx >= 0 && cIdx < FULL_ASSAULT_CAMPAIGN_PHASES.length) {
-      return FULL_ASSAULT_CAMPAIGN_PHASES[cIdx].stageNumber;
+    if (cIdx >= 0 && cIdx < activePhaseDefs.length) {
+      return activePhaseDefs[cIdx].stageNumber;
     }
-    if (/phase[1-5]_/i.test(phaseName)) return 1;
+    if (isHierarchicalEzm) {
+      if (/phase[1-2]_/i.test(phaseName)) return 1;
+      return 2;
+    }
+    if (/phase[1-6]_/i.test(phaseName)) return 1;
     return 2;
   }
 
@@ -283,7 +378,7 @@ export function CurriculumLineageFlow({
       {
         stageNumber: 1,
         stageName: "Sub-Curriculum 1: Objective Doctrine & VP Acceleration",
-        stageDescription: "Executed runs in VP sprint, suppression, race & tactical urban assault (Phases 1–5)",
+        stageDescription: "Executed runs in VP sprint, suppression, race, symmetric sandbox & tactical urban assault (Phases 1–6)",
         stageIcon: "🎯",
         accentColor: "#f59e0b",
         nodes: stage1Nodes,
@@ -291,7 +386,7 @@ export function CurriculumLineageFlow({
       {
         stageNumber: 2,
         stageName: "Sub-Curriculum 2: Multi-Scenario Self-Play vs Random",
-        stageDescription: "Executed runs in multi-scenario selfplay progression (Phases 6–13)",
+        stageDescription: "Executed runs in multi-scenario selfplay progression (Phases 7–14)",
         stageIcon: "⚔️",
         accentColor: "#38bdf8",
         nodes: stage2Nodes,
@@ -451,54 +546,84 @@ export function CurriculumLineageFlow({
           </div>
         </div>
 
-        {/* Win Rate & Target Goal */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, marginBottom: 2 }}>
-          <span className="muted">Win Rate:</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ fontWeight: 700, color: (node.winRate ?? 0) >= (node.targetWinRate ?? 0.5) ? "#34d399" : "#f87171" }}>
-              {node.winRate !== null ? `${(node.winRate * 100).toFixed(1)}%` : "-"}
-            </span>
-            {node.targetWinRate !== null && (
-              <span style={{ fontSize: 9, color: (node.winRate ?? 0) >= node.targetWinRate ? "#10b981aa" : "#94a3b8" }}>
-                (🎯 &gt;={(node.targetWinRate * 100).toFixed(0)}%)
-              </span>
-            )}
-          </div>
-        </div>
+        {/* Effective threshold resolution (from node gate_spec_snapshot or canonical phase def) */}
+        {(() => {
+          const effTargetWinRate = node.targetWinRate ?? item.canonicalDef?.targetWinRate;
+          const effTargetCapturedAvg = node.targetCapturedAvg ?? item.canonicalDef?.targetCapturedAvg;
+          const effTargetVpTakeRate = node.targetVpTakeRate !== undefined && node.targetVpTakeRate !== null ? node.targetVpTakeRate : item.canonicalDef?.targetVpTakeRate;
+          const effTargetScore = node.targetScore;
 
-        {/* VPs Controlled vs Goal */}
-        {(node.capturedAvg !== null || node.targetCapturedAvg !== null) && (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, marginBottom: 2 }}>
-            <span className="muted">VPs Avg:</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ fontWeight: 700, color: (node.capturedAvg ?? 0) >= (node.targetCapturedAvg ?? 0) ? "#34d399" : "#f87171" }}>
-                {node.capturedAvg !== null ? node.capturedAvg.toFixed(2) : "-"}
-              </span>
-              {node.targetCapturedAvg !== null && (
-                <span style={{ fontSize: 9, color: (node.capturedAvg ?? 0) >= node.targetCapturedAvg ? "#10b981aa" : "#94a3b8" }}>
-                  (🎯 &gt;={node.targetCapturedAvg.toFixed(2)})
-                </span>
-              )}
-            </div>
-          </div>
-        )}
+          const isWinRateMet = effTargetWinRate !== undefined && effTargetWinRate !== null ? (node.winRate ?? 0) >= effTargetWinRate : true;
+          const isCapturedMet = effTargetCapturedAvg !== undefined && effTargetCapturedAvg !== null ? (node.capturedAvg ?? 0) >= effTargetCapturedAvg : true;
+          const isTakeRateMet = effTargetVpTakeRate !== undefined && effTargetVpTakeRate !== null ? (node.vpTakeRate ?? 0) >= effTargetVpTakeRate : true;
+          const isScoreMet = effTargetScore !== undefined && effTargetScore !== null ? (node.score ?? 0) >= effTargetScore : true;
 
-        {/* VP Take Rate vs Goal */}
-        {(node.vpTakeRate !== null || node.targetVpTakeRate !== null) && (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, marginBottom: 2 }}>
-            <span className="muted">Take Rate:</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ fontWeight: 600, color: (node.vpTakeRate ?? 0) >= (node.targetVpTakeRate ?? 0) ? "#34d399" : "#f87171" }}>
-                {node.vpTakeRate !== null ? node.vpTakeRate.toFixed(3) : "-"}
-              </span>
-              {node.targetVpTakeRate !== null && (
-                <span style={{ fontSize: 9, color: (node.vpTakeRate ?? 0) >= node.targetVpTakeRate ? "#10b981aa" : "#94a3b8" }}>
-                  (🎯 &gt;={node.targetVpTakeRate.toFixed(3)})
-                </span>
+          return (
+            <>
+              {/* Win Rate & Target Goal */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, marginBottom: 2 }}>
+                <span className="muted">Win Rate:</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontWeight: 700, color: effTargetWinRate !== undefined && effTargetWinRate !== null ? (isWinRateMet ? "#34d399" : "#f87171") : "#e2e8f0" }}>
+                    {node.winRate !== null ? `${(node.winRate * 100).toFixed(1)}%` : "-"}
+                  </span>
+                  {effTargetWinRate !== undefined && effTargetWinRate !== null && (
+                    <span style={{ fontSize: 9, color: isWinRateMet ? "#10b981aa" : "#f87171aa" }}>
+                      (🎯 &gt;={(effTargetWinRate * 100).toFixed(0)}%)
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Match Score (Wins + 0.5*Draws) */}
+              {node.score !== null && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, marginBottom: 2 }}>
+                  <span className="muted">Score:</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ fontWeight: 600, color: effTargetScore !== undefined && effTargetScore !== null ? (isScoreMet ? "#34d399" : "#f87171") : "#38bdf8" }}>
+                      {`${(node.score * 100).toFixed(1)}%`}
+                    </span>
+                    {effTargetScore !== undefined && effTargetScore !== null && (
+                      <span style={{ fontSize: 9, color: isScoreMet ? "#10b981aa" : "#f87171aa" }}>
+                        (🎯 &gt;={(effTargetScore * 100).toFixed(0)}%)
+                      </span>
+                    )}
+                  </div>
+                </div>
               )}
-            </div>
-          </div>
-        )}
+
+              {/* VPs Controlled vs Goal */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, marginBottom: 2 }}>
+                <span className="muted">VPs Avg:</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontWeight: 700, color: effTargetCapturedAvg !== undefined && effTargetCapturedAvg !== null ? (isCapturedMet ? "#34d399" : "#f87171") : "#e2e8f0" }}>
+                    {node.capturedAvg !== null ? node.capturedAvg.toFixed(2) : "-"}
+                  </span>
+                  {effTargetCapturedAvg !== undefined && effTargetCapturedAvg !== null && (
+                    <span style={{ fontSize: 9, color: isCapturedMet ? "#10b981aa" : "#f87171aa" }}>
+                      (🎯 &gt;={effTargetCapturedAvg.toFixed(2)})
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* VP Take Rate vs Goal (Only shown if phase evaluates Take Rate or if metric is present) */}
+              {node.vpTakeRate !== null && effTargetVpTakeRate !== undefined && effTargetVpTakeRate !== null && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, marginBottom: 2 }}>
+                  <span className="muted">Take Rate:</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ fontWeight: 600, color: isTakeRateMet ? "#34d399" : "#f87171" }}>
+                      {node.vpTakeRate.toFixed(3)}
+                    </span>
+                    <span style={{ fontSize: 9, color: isTakeRateMet ? "#10b981aa" : "#f87171aa" }}>
+                      (🎯 &gt;={effTargetVpTakeRate.toFixed(3)})
+                    </span>
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         {/* Status indicator */}
         <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10 }}>
@@ -519,6 +644,29 @@ export function CurriculumLineageFlow({
             {node.checkpoint && node.checkpoint !== "-" ? "Checkpoint OK" : "In Progress"}
           </span>
         </div>
+
+        {/* Explicit gate failure diagnostics if held */}
+        {isHeld && node.gateFailReasons && node.gateFailReasons.length > 0 && (
+          <div
+            style={{
+              marginTop: 6,
+              padding: "4px 6px",
+              background: "#450a0a90",
+              border: "1px solid #dc262650",
+              borderRadius: 4,
+              fontSize: 9.5,
+              color: "#fca5a5",
+              lineHeight: 1.3,
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 2, color: "#f87171" }}>Unmet Gate Thresholds:</div>
+            {node.gateFailReasons.slice(0, 3).map((reason, rIdx) => (
+              <div key={rIdx} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={reason}>
+                • {reason}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   };
@@ -693,7 +841,9 @@ export function CurriculumLineageFlow({
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: "#f59e0b", display: "flex", alignItems: "center", gap: 6 }}>
-            <span>🗺️</span> Full Assault Campaign Pipeline (13 Phases across 2 Sub-Curriculums)
+            <span>🗺️</span> {isHierarchicalEzm
+              ? `H-EZ-M v3.0 Hierarchical Tactical Campaign (${activePhaseDefs.length} Canonical Phases)`
+              : `Full Assault Campaign Pipeline (${activePhaseDefs.length} Phases across 2 Sub-Curriculums)`}
           </span>
           <span
             style={{
@@ -706,7 +856,7 @@ export function CurriculumLineageFlow({
               fontWeight: 700,
             }}
           >
-            ★ {canonicalExecutedCount} / {FULL_ASSAULT_CAMPAIGN_PHASES.length} Campaign Phases Executed
+            ★ {canonicalExecutedCount} / {activePhaseDefs.length} Campaign Phases Executed
           </span>
           {canonicalPendingCount > 0 && (
             <span
@@ -768,7 +918,7 @@ export function CurriculumLineageFlow({
             }}
             title="Show the true 13-Phase Campaign Roadmap organized in dedicated Sub-Curriculum rows"
           >
-            ★ 13-Phase Campaign Rows ({canonicalExecutedCount}/13)
+            ★ {isHierarchicalEzm ? "4-Phase H-EZ-M Campaign" : "13-Phase Campaign"} Rows ({canonicalExecutedCount}/{activePhaseDefs.length})
           </button>
           <button
             onClick={() => setViewMode("chronological")}
@@ -826,7 +976,9 @@ export function CurriculumLineageFlow({
                         STAGE TRANSITION BREAKTHROUGH:
                       </span>
                       <span style={{ fontSize: 11, color: "#cbd5e1" }}>
-                        Weights from Stage {stage.stageNumber - 1} Promoted Checkpoint initialize Stage {stage.stageNumber} Base Model
+                        {isHierarchicalEzm
+                          ? "Weights from Phase 2 Promoted Checkpoint initialize Phase 3 Fortified Breach Base Model"
+                          : `Weights from Stage ${stage.stageNumber - 1} Promoted Checkpoint initialize Stage ${stage.stageNumber} Base Model`}
                       </span>
                     </div>
                     <span

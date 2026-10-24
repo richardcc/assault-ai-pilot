@@ -530,7 +530,13 @@ export function ModelPage() {
               <span>📚</span> Documentation
             </button>
             <button
-              onClick={() => window.open("http://127.0.0.1:8780", "_blank")}
+              onClick={() => {
+                const isCloud = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+                if (isCloud) {
+                  alert("Tactical Unit & Formation Editor runs on your local development workstation (port 8780). Run .\\start_assault.bat to launch it locally.");
+                }
+                window.open("http://127.0.0.1:8780", "_blank");
+              }}
               style={{
                 background: "#065f46",
                 color: "#6ee7b7",
@@ -544,12 +550,18 @@ export function ModelPage() {
                 alignItems: "center",
                 gap: 4,
               }}
-              title="Open Tactical Unit & Formation Catalog Editor (Port 8780)"
+              title="Runs on local development environment (Port 8780)"
             >
-              <span>🎖️</span> Unit Editor (8780)
+              <span>🎖️</span> Unit Editor {typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1" ? "(Local 8780)" : "(8780)"}
             </button>
             <button
-              onClick={() => window.open("http://127.0.0.1:8001/docs", "_blank")}
+              onClick={() => {
+                const isCloud = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+                if (isCloud) {
+                  alert("FastAPI backend & Swagger API run on your local development workstation (port 8001). Run .\\start_assault.bat to launch it locally.");
+                }
+                window.open("http://127.0.0.1:8001/docs", "_blank");
+              }}
               style={{
                 background: "#1e293b",
                 color: "#fde047",
@@ -563,9 +575,9 @@ export function ModelPage() {
                 alignItems: "center",
                 gap: 4,
               }}
-              title="Open FastAPI Swagger Interactive Docs (Port 8001)"
+              title="Runs on local development environment (Port 8001)"
             >
-              <span>⚡</span> Swagger API (8001)
+              <span>⚡</span> Swagger API {typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1" ? "(Local 8001)" : "(8001)"}
             </button>
             <button
               onClick={() =>

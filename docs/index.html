@@ -2034,19 +2034,19 @@
 
       <button class="btn-link" id="btnAllDocs" onclick="switchDocument('all')">📚 Vista Completa (Todos)</button>
 
-      <a href="Assault_Documentacion_Tecnica_Completa.pdf" target="_blank" download="Assault_Documentacion_Tecnica_Completa.pdf" class="btn-link" style="border-color: #f43f5e; color: #f43f5e;" title="Descargar manual técnico completo en PDF (157 páginas con diagramas y fórmulas)">📥 Descargar PDF (157 págs)</a>
+      <a href="Assault_Documentacion_Tecnica_Completa.pdf" target="_blank" download="Assault_Documentacion_Tecnica_Completa.pdf" id="btnDownloadPdf" class="btn-link" style="border-color: #f43f5e; color: #f43f5e;" title="Descargar manual técnico completo en PDF (157 páginas con diagramas y fórmulas)">📥 Descargar PDF (157 págs)</a>
 
-      <a href="http://127.0.0.1:8001/docs" target="_blank" class="btn-link" style="border-color: #38bdf8; color: #38bdf8;">⚡ Swagger UI (8001)</a>
+      <a href="/" class="btn-link" id="linkMlopsViewer" style="border-color: #3b82f6; color: #60a5fa;" title="Panel MLOps y visor forense de repetición">📊 MLOps Dashboard</a>
 
-      <a href="http://127.0.0.1:8001/redoc" target="_blank" class="btn-link">📖 ReDoc (8001)</a>
+      <a href="http://127.0.0.1:8001/docs" target="_blank" class="btn-link local-service-link" id="linkSwagger" style="border-color: #38bdf8; color: #38bdf8;" data-port="8001" data-path="/docs">⚡ Swagger UI <span class="port-tag">(8001)</span></a>
 
-      <a href="http://127.0.0.1:8778" class="btn-link" title="Panel MLOps y visor forense de repetición (Puerto 8778)">📊 MLOps Viewer (8778)</a>
+      <a href="http://127.0.0.1:8001/redoc" target="_blank" class="btn-link local-service-link" id="linkRedoc" data-port="8001" data-path="/redoc">📖 ReDoc <span class="port-tag">(8001)</span></a>
 
-      <a href="http://127.0.0.1:4200" target="_blank" class="btn-link" style="border-color: #818cf8; color: #818cf8;" title="Prefect Orchestrator y dashboard de flujos de entrenamiento (Puerto 4200)">🔄 Prefect UI (4200)</a>
+      <a href="http://127.0.0.1:8780" target="_blank" class="btn-link local-service-link" id="linkEditor" style="border-color: #10b981; color: #10b981;" data-port="8780" data-path="/" title="Editor interactivo de cartas de unidades y formaciones OOB">🎖️ Editor Unidades <span class="port-tag">(8780)</span></a>
 
-      <a href="http://127.0.0.1:8780" target="_blank" class="btn-link" style="border-color: #10b981; color: #10b981;" title="Editor interactivo de cartas de unidades y formaciones OOB (Puerto 8780)">🎖️ Editor Unidades (8780)</a>
+      <a href="http://localhost:5173" target="_blank" class="btn-link local-service-link" id="linkSimulator" style="border-color: #a855f7; color: #c084fc;" data-port="5173" data-path="/" title="Simulador táctico wargame en tablero hexagonal">🎮 Simulador Táctico <span class="port-tag">(5173)</span></a>
 
-      <a href="http://localhost:5173" target="_blank" class="btn-link" title="Simulador táctico wargame en tablero hexagonal (Puerto 5173)">🎮 Simulador Táctico (5173)</a>
+      <a href="http://127.0.0.1:4200" target="_blank" class="btn-link local-service-link" id="linkPrefect" style="border-color: #818cf8; color: #818cf8;" data-port="4200" data-path="/" title="Prefect Orchestrator y dashboard de flujos de entrenamiento">🔄 Prefect UI <span class="port-tag">(4200)</span></a>
 
     </div>
 
@@ -2325,6 +2325,37 @@
     });
 
 
+
+    // Environment-aware Dynamic Navigation (Cloud vs Local Workstation)
+    (function initEnvironmentAwareHeader() {
+      const isCloud = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+      const mlopsBtn = document.getElementById('linkMlopsViewer');
+      if (mlopsBtn) {
+        mlopsBtn.href = '/';
+        mlopsBtn.title = isCloud
+          ? 'Abrir Dashboard MLOps en la nube (dominio actual)'
+          : 'Abrir Visor MLOps local (Puerto 8778)';
+        mlopsBtn.innerHTML = isCloud
+          ? '📊 MLOps Dashboard <span style="font-size: 10px; background: rgba(59,130,246,0.25); border: 1px solid rgba(59,130,246,0.5); padding: 1px 6px; border-radius: 999px; margin-left: 4px;">Cloud</span>'
+          : '📊 MLOps Viewer (8778)';
+      }
+
+      const pdfBtn = document.getElementById('btnDownloadPdf');
+      if (pdfBtn && isCloud) {
+        pdfBtn.href = '/docs/Assault_Documentacion_Tecnica_Completa.pdf';
+      }
+
+      if (isCloud) {
+        document.querySelectorAll('.local-service-link').forEach((link) => {
+          const port = link.getAttribute('data-port') || '';
+          const tag = link.querySelector('.port-tag');
+          if (tag) {
+            tag.innerHTML = `<span style="font-size: 9.5px; opacity: 0.85; background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15);">Local :${port}</span>`;
+          }
+          link.title = `Este servicio (${link.innerText.trim()}) se ejecuta en tu entorno de desarrollo local (puerto ${port}). Ejecuta .\\start_assault.bat en tu PC para usarlo.`;
+        });
+      }
+    })();
 
     const docsData = JSON.parse(document.getElementById('embeddedDocsData').textContent);
 

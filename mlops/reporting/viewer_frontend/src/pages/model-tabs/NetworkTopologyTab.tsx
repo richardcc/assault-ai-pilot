@@ -87,44 +87,44 @@ interface NodeDetail {
 }
 
 const DEFAULT_CHANNELS_LIST: Array<{ idx: number; name: string; cat: string; desc: string }> = [
-  { idx: 0, name: "ally_presence", cat: "units", desc: "1.0 en hexágonos ocupados por unidades aliadas activas." },
-  { idx: 1, name: "enemy_presence", cat: "units", desc: "1.0 en hexágonos con unidades enemigas detectadas." },
-  { idx: 2, name: "ally_hp_norm", cat: "units", desc: "Puntos de vida normalizados [0-1] de las escuadras aliadas según max_strength." },
-  { idx: 3, name: "enemy_hp_norm", cat: "units", desc: "Puntos de vida normalizados [0-1] de las escuadras enemigas según max_strength." },
-  { idx: 4, name: "ally_crossfire_risk", cat: "units", desc: "Riesgo de fuego cruzado enemigo sobre unidades aliadas / estado de supresión aliada." },
-  { idx: 5, name: "enemy_target_engagement", cat: "units", desc: "Hexágonos enemigos con objetivos aliados a su alcance de tiro / supresión enemiga." },
-  { idx: 6, name: "vp_contest_race", cat: "vp", desc: "Ventaja diferencial en carrera hacia el VP: >0 si el aliado llega antes, <0 si el enemigo lidera." },
-  { idx: 7, name: "reaction_fire_threat", cat: "units", desc: "Mapa de calor continuo de amenaza y fuego de reacción enemigo (overwatch/opportunity fire)." },
-  { idx: 8, name: "ally_heavy_mg_support", cat: "units", desc: "1.0 para ametralladoras pesadas y medianas aliadas (HMG, MMG, MG42)." },
-  { idx: 9, name: "enemy_heavy_mg_support", cat: "units", desc: "1.0 para ametralladoras pesadas y medianas enemigas (HMG, MMG, MG42)." },
-  { idx: 10, name: "ally_indirect_mortar", cat: "units", desc: "1.0 para armas de tiro indirecto / morteros aliados (50mm, 60mm, 81mm)." },
-  { idx: 11, name: "local_firepower_balance", cat: "units", desc: "Balance local de potencia de fuego [+1 aliado dominante, 0 disputado, -1 enemigo dominante]." },
-  { idx: 12, name: "map_playable", cat: "terrain", desc: "1.0 en hexágonos válidos del mapa; 0.0 en los bordes fuera de tablero." },
-  { idx: 13, name: "vp_mask", cat: "vp", desc: "1.0 en hexágonos que son Puntos de Victoria (VPs)." },
-  { idx: 14, name: "vp_owner_relative", cat: "vp", desc: "+1.0 controlado por aliado, -1.0 por enemigo, 0.0 disputado/neutral." },
-  { idx: 15, name: "terrain_move_cost_norm", cat: "terrain", desc: "Coste en puntos de movimiento (carretera = bajo, bosque/colina = alto)." },
-  { idx: 16, name: "terrain_cover_norm", cat: "terrain", desc: "Bonificación defensiva de cobertura (edificios urbanos = 0.5+)." },
-  { idx: 17, name: "terrain_los_block", cat: "terrain", desc: "Bloqueo de línea de visión por elevación o construcciones densas." },
-  { idx: 18, name: "vp_distance_field", cat: "vp", desc: "Campo radial continuo de proximidad al VP más cercano (1 / (1 + dist))." },
-  { idx: 19, name: "q_coord_norm", cat: "hex", desc: "Coordenada axial Q del hexágono normalizada [-1, 1]." },
-  { idx: 20, name: "r_coord_norm", cat: "hex", desc: "Coordenada axial R del hexágono normalizada [-1, 1]." },
-  { idx: 21, name: "frontline_control", cat: "hex", desc: "Campo de potencial territorial [-1, +1] (difusión y control de línea de frente)." },
-  { idx: 22, name: "ally_mobility_norm", cat: "units", desc: "Puntos de movimiento disponibles restantes de la escuadra activa." },
-  { idx: 23, name: "enemy_indirect_mortar", cat: "units", desc: "1.0 para armas de tiro indirecto / morteros enemigos (50mm, 8cm)." },
-  { idx: 24, name: "ally_direct_range_norm", cat: "units", desc: "Alcance de fuego directo y proyección 2D de footprint de alcance óptimo de combate aliado." },
-  { idx: 25, name: "enemy_direct_range_norm", cat: "units", desc: "Alcance de fuego directo y proyección 2D de footprint de alcance óptimo de combate enemigo." },
-  { idx: 26, name: "ally_fire_coverage", cat: "units", desc: "Heatmap de cobertura de fuego directo aliado sobre cada casilla del mapa." },
-  { idx: 27, name: "heavy_fortifications", cat: "terrain", desc: "Fortificaciones pesadas: +1.0 búnker/casamata, +0.70 trinchera/emplazamiento, +0.40 urbano de piedra defensivo." },
-  { idx: 28, name: "ally_attack_power_norm", cat: "units", desc: "Poder de fuego ofensivo aliado (dados de combate normalizados)." },
-  { idx: 29, name: "hazard_mines_and_wire", cat: "terrain", desc: "Peligros y obstáculos del terreno: +1.0 campos de minas, +0.60 alambradas de espino." },
-  { idx: 30, name: "ally_defense_power_norm", cat: "units", desc: "Capacidad defensiva de las escuadras aliadas (dados de defensa normalizados)." },
-  { idx: 31, name: "enemy_defense_power_norm", cat: "units", desc: "Capacidad defensiva de las escuadras enemigas (dados de defensa normalizados)." },
-  { idx: 32, name: "ally_doctrine_role", cat: "units", desc: "Codificación continua del rol doctrinal aliado (Spearhead=1.0, Fire Support=0.75, Recon=0.50, Screen=0.25)." },
-  { idx: 33, name: "enemy_doctrine_role", cat: "units", desc: "Codificación continua del rol doctrinal enemigo deducido o proyectado (Spearhead=1.0, Fire Support=0.75, Recon=0.50, Screen=0.25)." },
-  { idx: 34, name: "ally_optimal_footprint", cat: "units", desc: "Footprint 2D de alcance óptimo de combate aliado proyectado sobre el tablero." },
-  { idx: 35, name: "enemy_optimal_footprint", cat: "units", desc: "Footprint 2D de alcance óptimo de combate enemigo proyectado sobre el tablero." },
-  { idx: 36, name: "turn_urgency_pressure", cat: "global", desc: "Presión temporal continua (t/T) y campo de urgencia radial amplificado hacia VPs no capturados." },
-  { idx: 37, name: "paralysis_exposure_risk", cat: "units", desc: "Mapa de calor de riesgo de parálisis: escuadras aliadas expuestas fuera de cobertura sin maniobra ni fuego." },
+  { idx: 0, name: "ally_presence", cat: "units", desc: "1.0 in hexes occupied by active friendly units." },
+  { idx: 1, name: "enemy_presence", cat: "units", desc: "1.0 in hexes with detected enemy units." },
+  { idx: 2, name: "ally_hp_norm", cat: "units", desc: "Normalized HP [0-1] of friendly squads based on max_strength." },
+  { idx: 3, name: "enemy_hp_norm", cat: "units", desc: "Normalized HP [0-1] of enemy squads based on max_strength." },
+  { idx: 4, name: "ally_crossfire_risk", cat: "units", desc: "Enemy crossfire risk on friendly units / friendly suppression state." },
+  { idx: 5, name: "enemy_target_engagement", cat: "units", desc: "Enemy hexes with friendly targets in weapon range / enemy suppression state." },
+  { idx: 6, name: "vp_contest_race", cat: "vp", desc: "Differential advantage in VP race: >0 if friendly arrives first, <0 if enemy leads." },
+  { idx: 7, name: "reaction_fire_threat", cat: "units", desc: "Continuous heatmap of enemy threat and reaction fire (overwatch/opportunity fire)." },
+  { idx: 8, name: "ally_heavy_mg_support", cat: "units", desc: "1.0 for friendly heavy and medium machine guns (HMG, MMG, MG42)." },
+  { idx: 9, name: "enemy_heavy_mg_support", cat: "units", desc: "1.0 for enemy heavy and medium machine guns (HMG, MMG, MG42)." },
+  { idx: 10, name: "ally_indirect_mortar", cat: "units", desc: "1.0 for friendly indirect fire weapons / mortars (50mm, 60mm, 81mm)." },
+  { idx: 11, name: "local_firepower_balance", cat: "units", desc: "Local firepower balance [+1 friendly dominant, 0 contested, -1 enemy dominant]." },
+  { idx: 12, name: "map_playable", cat: "terrain", desc: "1.0 in playable map hexes; 0.0 on out-of-bounds map borders." },
+  { idx: 13, name: "vp_mask", cat: "vp", desc: "1.0 in hexes designated as Victory Points (VPs)." },
+  { idx: 14, name: "vp_owner_relative", cat: "vp", desc: "+1.0 friendly controlled, -1.0 enemy controlled, 0.0 contested/neutral." },
+  { idx: 15, name: "terrain_move_cost_norm", cat: "terrain", desc: "Movement point cost (road = low, forest/hill = high)." },
+  { idx: 16, name: "terrain_cover_norm", cat: "terrain", desc: "Defensive cover bonus (urban stone buildings = 0.5+)." },
+  { idx: 17, name: "terrain_los_block", cat: "terrain", desc: "Line of sight block due to elevation or dense terrain/structures." },
+  { idx: 18, name: "vp_distance_field", cat: "vp", desc: "Continuous radial proximity field to nearest VP (1 / (1 + dist))." },
+  { idx: 19, name: "q_coord_norm", cat: "hex", desc: "Normalized axial Q coordinate [-1, 1]." },
+  { idx: 20, name: "r_coord_norm", cat: "hex", desc: "Normalized axial R coordinate [-1, 1]." },
+  { idx: 21, name: "frontline_control", cat: "hex", desc: "Territorial potential field [-1, +1] (frontline diffusion and area control)." },
+  { idx: 22, name: "ally_mobility_norm", cat: "units", desc: "Remaining available movement points of the active squad." },
+  { idx: 23, name: "enemy_indirect_mortar", cat: "units", desc: "1.0 for enemy indirect fire weapons / mortars (50mm, 8cm)." },
+  { idx: 24, name: "ally_direct_range_norm", cat: "units", desc: "Direct fire range and projected 2D optimal combat footprint for friendly squad." },
+  { idx: 25, name: "enemy_direct_range_norm", cat: "units", desc: "Direct fire range and projected 2D optimal combat footprint for enemy squad." },
+  { idx: 26, name: "ally_fire_coverage", cat: "units", desc: "Heatmap of friendly direct fire coverage over each board hex." },
+  { idx: 27, name: "heavy_fortifications", cat: "terrain", desc: "Heavy fortifications: +1.0 bunker/pillbox, +0.70 trench/gun pit, +0.40 sandbag/defensive stone urban." },
+  { idx: 28, name: "ally_attack_power_norm", cat: "units", desc: "Friendly offensive combat firepower (normalized combat dice weight)." },
+  { idx: 29, name: "hazard_mines_and_wire", cat: "terrain", desc: "Terrain hazards and obstacles: +1.0 minefields, +0.60 barbed wire entanglements." },
+  { idx: 30, name: "ally_defense_power_norm", cat: "units", desc: "Defensive capability of friendly squads (normalized defense dice weight)." },
+  { idx: 31, name: "enemy_defense_power_norm", cat: "units", desc: "Defensive capability of enemy squads (normalized defense dice weight)." },
+  { idx: 32, name: "ally_doctrine_role", cat: "units", desc: "Continuous encoding of friendly doctrinal role (Spearhead=1.0, Fire Support=0.75, Recon=0.50, Screen=0.25, Command=0.10)." },
+  { idx: 33, name: "enemy_doctrine_role", cat: "units", desc: "Continuous encoding of projected enemy doctrinal role (Spearhead=1.0, Fire Support=0.75, Recon=0.50, Screen=0.25)." },
+  { idx: 34, name: "ally_optimal_footprint", cat: "units", desc: "Projected 2D optimal combat range footprint for friendly forces across the board." },
+  { idx: 35, name: "enemy_optimal_footprint", cat: "units", desc: "Projected 2D optimal combat range footprint for enemy forces across the board." },
+  { idx: 36, name: "turn_urgency_pressure", cat: "global", desc: "Continuous temporal pressure (t/T) and radial urgency field amplified towards unconquered VPs." },
+  { idx: 37, name: "paralysis_exposure_risk", cat: "units", desc: "Paralysis exposure risk heatmap: friendly squads exposed in open terrain without cover, maneuver, or fire." },
 ];
 
 export function NetworkTopologyTab({
@@ -371,7 +371,7 @@ export function NetworkTopologyTab({
   const moraleLoss = nVal(summaryObj.aux_morale_loss ?? summaryObj.loss_morale ?? lossesObj.aux_morale_loss ?? lossesObj.morale);
   const moraleRisk = getHeadMetric(evalRows, "morale", "suppression_risk_score", [], trainSummary);
 
-  const inChannels = Number(modelCfg.observation_channels || cfg.observation_channels || 32) || 32;
+  const inChannels = Number(modelCfg.observation_channels || cfg.observation_channels || 38) || 38;
   const boardH = Number(modelCfg.observation_height || cfg.observation_height || 16) || 16;
   const boardW = Number(modelCfg.observation_width || cfg.observation_width || 16) || 16;
   const hiddenDim = Number(modelCfg.hidden_dim || cfg.hidden_dim || 48) || 48;
@@ -384,6 +384,11 @@ export function NetworkTopologyTab({
   const batchSize = Number(cfg.batch_size || 16) || 16;
   const ampDtype = String(cfg.amp_dtype || "bf16");
   const mctsSims = Number(selfplayCfg.mcts_simulations || 256) || 256;
+  const enableMultitask = Boolean(modelCfg.enable_multitask ?? cfg.enable_multitask ?? true);
+  const numTasks = Number(modelCfg.num_tasks ?? cfg.num_tasks ?? 16) || 16;
+  const taskEmbedDim = Number(modelCfg.task_embedding_dim ?? cfg.task_embedding_dim ?? 32) || 32;
+  const enableHierarchicalGoals = Boolean(modelCfg.enable_hierarchical_goals ?? cfg.enable_hierarchical_goals ?? true);
+  const numGoalModes = Number(modelCfg.num_goal_modes ?? cfg.num_goal_modes ?? 4) || 4;
 
   // Reset selected node if switching to a run where that head is not active
   useEffect(() => {
@@ -443,7 +448,7 @@ export function NetworkTopologyTab({
       } else if (res?.ranked_channels) {
         setAttributionReport(res as Dict);
       } else {
-        throw new Error(String(res?.error || "Error al procesar el análisis de efectividad"));
+        throw new Error(String(res?.error || "Failed to process channel effectiveness analysis"));
       }
     } catch (err: any) {
       setAnalysisError(err?.message || String(err));
@@ -611,27 +616,28 @@ export function NetworkTopologyTab({
         id: "observation",
         name: "Observation Tensor o_t",
         math: `o_t \\in \\mathbb{R}^{B \\times ${inChannels} \\times ${boardH} \\times ${boardW}}`,
-        role: "Tensor sensorial de entrada extraído del simulador hexagonal VOEC en el paso temporal t.",
-        inShape: `B × ${inChannels} canales × ${boardH} × ${boardW} hexágonos`,
+        role: "Sensory input tensor extracted from the VOEC hexagonal tactical simulator at timestep t.",
+        inShape: `B × ${inChannels} channels × ${boardH} × ${boardW} hexes`,
         outShape: `B × ${inChannels} × ${boardH} × ${boardW}`,
         architecture: [
-          `Canales 0-5: Presencia y HP aliada/enemiga normalizada, supresión y crossfire`,
-          `Canales 6-11: Carrera de VPs, amenaza reactiva, HMGs, morteros indirectos y balance de fuego`,
-          `Canales 12-18: Máscara jugable, costes terreno, cobertura, LOS y campo radial hacia VPs`,
-          `Canales 19-20: Coordenadas hexagonales axiales normalizadas (q, r)`,
-          `Canales 21-25: Control de frente, movilidad y Footprint 2D de alcance óptimo de combate`,
-          `Canales 26-31: Cobertura de fuego aliada, fortificaciones pesadas, potencia ofensiva y defensiva`,
-          `Canales 32-${inChannels - 1}: Roles doctrinales continuos aliados/enemigos y proyecciones de footprint extendido`
+          `Channels 0-5: Friendly/Enemy presence, normalized HP, crossfire risk, and suppression state`,
+          `Channels 6-11: VP contest race, reaction threat, HMG support, indirect mortars, and firepower balance`,
+          `Channels 12-18: Playable hex mask, terrain movement costs, cover bonuses, LOS blocking, and radial VP field`,
+          `Channels 19-20: Normalized axial coordinates (q, r)`,
+          `Channels 21-25: Frontline potential, remaining mobility, and 2D optimal direct combat range footprint`,
+          `Channels 26-31: Friendly fire coverage heatmap, heavy fortifications, and offensive/defensive combat dice weights`,
+          `Channels 32-35: Continuous friendly/enemy doctrinal roles and projected optimal engagement footprints`,
+          `Channels 36-37: Temporal turn urgency pressure (t/T) and paralysis exposure risk in open terrain`
         ],
-        paramEstimate: "0 parámetros (Datos del Simulador)",
-        receptiveField: `${boardH}×${boardW} Hexágonos (Resolución completa)`,
-        details: `Tensor denso construido por el adaptador VOEC con resolución espacial ${boardH}×${boardW}. Configurado con ${inChannels} canales de entrada en run ${runId}.`,
+        paramEstimate: "0 parameters (Environment Sensory Feed)",
+        receptiveField: `${boardH}×${boardW} Hexes (Full Board Resolution)`,
+        details: `Dense feature tensor constructed by VOEC adapter with ${boardH}×${boardW} spatial resolution. Dynamically configured with ${inChannels} input channels for run ${runId}.`,
       },
       representation: {
         id: "representation",
         name: "Representation Network h_θ(o)",
         math: `h_\\theta(o_t) \\to s_0`,
-        role: `Codificador de observación (${encoderType.toUpperCase()}). Transforma el tablero bruto en un espacio latente continuo de ${hiddenDim} dimensiones.`,
+        role: `Observation encoder (${encoderType.toUpperCase()}). Projects the raw 38-channel tactical board into a continuous ${hiddenDim}-dimensional latent state.`,
         inShape: `B × ${inChannels} × ${boardH} × ${boardW}`,
         outShape: `B × ${hiddenDim} × ${boardH} × ${boardW}`,
         architecture: isV2Optimized
@@ -641,7 +647,8 @@ export function NetworkTopologyTab({
               ...Array.from({ length: dynamicsBlocks }, (_, i) =>
                 `ResidualBlock ${i + 1}: Conv3x3(${hiddenDim}) -> GroupNorm -> SiLU -> Conv3x3 -> GroupNorm + Squeeze-and-Excitation (SE gating, r=4)`
               ),
-              "Min-Max Latent Scaling: s_norm = (s - min) / (max - min + ε)"
+              "Min-Max Latent Scaling: s_norm = (s - min) / (max - min + ε)",
+              enableMultitask ? "FiLMLayer Hook: Ready for Multi-Task scenario modulation" : "Monotask Representation Backbone"
             ]
           : [
               `Conv2d(${inChannels}, ${hiddenDim}, kernel_size=3, padding=1)`,
@@ -649,67 +656,86 @@ export function NetworkTopologyTab({
               ...Array.from({ length: dynamicsBlocks }, (_, i) =>
                 `ResidualBlock ${i + 1}: Conv3x3(${hiddenDim}) -> LayerNorm -> ReLU -> Conv3x3(${hiddenDim})`
               ),
-              "Skip Connections aditivas residuales (Legacy v1, sin SE)"
+              "Additive Residual Skip Connections (Legacy v1, without SE)"
             ],
-        paramEstimate: `~${repParams.toLocaleString()} parámetros`,
-        receptiveField: `~${repReceptive}×${repReceptive} Hexágonos (${dynamicsBlocks} bloques convolucionales 3×3)`,
+        paramEstimate: `~${repParams.toLocaleString()} parameters`,
+        receptiveField: `~${repReceptive}×${repReceptive} Hexes (${dynamicsBlocks} convolutional 3×3 blocks)`,
         details: isV2Optimized
-          ? `Arquitectura v2 con GroupNorm, activación SiLU suave y compuertas Squeeze-and-Excitation (SE) que modulan la importancia de los canales tácticos. Aplica normalización canónica Min-Max al estado latente.`
-          : `Arquitectura v1 clásica con bloques residuales densos estándar sin modulación de canales SE.`,
+          ? `V2 architecture with GroupNorm, smooth SiLU activation, and Squeeze-and-Excitation (SE) channel gating to weight critical tactical features. Normalizes latent manifold with canonical Min-Max scaling.`
+          : `Classic V1 architecture with dense residual blocks without SE channel modulation.`,
+      },
+      task_conditioning: {
+        id: "task_conditioning",
+        name: "Task Conditioning & FiLM Module (EZ-M)",
+        math: `e_\\tau = \\text{TaskEmbed}(\\tau, c_\\tau) \\implies \\text{FiLM}(x, e_\\tau) = (1 + \\gamma(e_\\tau)) \\odot x + \\beta(e_\\tau)`,
+        role: "Multi-Task Model-Based RL (EZ-M): Decouples universal combat physics from scenario-specific goals via Feature-wise Linear Modulation with zero-init identity preservation.",
+        inShape: `Task ID \\tau \\in \\{0..${numTasks - 1}\\} + Topography Context c_\\tau \\in \\mathbb{R}^5`,
+        outShape: `Embedding e_\\tau \\in \\mathbb{R}^{${taskEmbedDim}} \\to \\text{Modulation } (\\gamma, \\beta)`,
+        architecture: [
+          `Task Embedding: Embedding(${numTasks}, ${taskEmbedDim})`,
+          `Context Projection: Linear(5 + ${taskEmbedDim}, ${taskEmbedDim}) -> SiLU`,
+          `Zero-Init FiLM Projections: Linear(${taskEmbedDim}, ${hiddenDim}) [Weights & Biases = 0]`,
+          "Identity Preservation: FiLM(x, 0) = x (Zero distortion on single-task/unconditioned inference)",
+          "Stratified Multi-Task Replay Buffer (Balanced sampling across all 38 scenarios)"
+        ],
+        paramEstimate: `~${((numTasks * taskEmbedDim) + (5 + taskEmbedDim) * taskEmbedDim + taskEmbedDim * hiddenDim * 2).toLocaleString()} parameters`,
+        receptiveField: "Global / Cross-Scenario Conditioned",
+        details: "Prevents catastrophic forgetting when transitioning between open terrain and dense urban assault. The world model learns universal combat physics while FiLM modulates value and policy objectives per scenario.",
       },
       latent: {
         id: "latent",
         name: "Latent State s_t",
         math: `s_t \\in \\mathbb{R}^{B \\times ${hiddenDim} \\times ${boardH} \\times ${boardW}}`,
-        role: `Representación latente compacta (${hiddenDim} canales). Es el estado abstracto sobre el que MCTS planifica sin interactuar con el motor físico.`,
+        role: `Compact latent spatial state (${hiddenDim} channels). Abstract state representation upon which MCTS plans without interacting with the physical game engine.`,
         inShape: `B × ${hiddenDim} × ${boardH} × ${boardW}`,
         outShape: `B × ${hiddenDim} × ${boardH} × ${boardW}`,
         architecture: isV2Optimized
           ? [
-              `${hiddenDim} canales espaciales latentes en ${boardH}×${boardW}`,
-              "Normalización Min-Max canónica EfficientZero por muestra",
-              "Estabilidad de norma garantizada a lo largo de rollouts profundos"
+              `${hiddenDim} spatial latent feature channels on ${boardH}×${boardW}`,
+              "Canonical EfficientZero Min-Max normalization per sample",
+              "Guaranteed norm stability across deep temporal rollouts"
             ]
           : [
-              `${hiddenDim} canales de características latentes`,
-              "Normalización L2 por canal / LayerNorm",
-              `Conserva topología espacial 2D de ${boardH}×${boardW} hexágonos`
+              `${hiddenDim} latent feature channels`,
+              "L2 normalization per channel / LayerNorm",
+              `Preserves 2D spatial topology on ${boardH}×${boardW} hex grid`
             ],
-        paramEstimate: "Buffer de memoria GPU (Caché MCTS)",
-        receptiveField: "Generado por h(o) en t=0 o imaginado por g(s, a) en t>0",
-        details: `Espacio continuo donde se proyecta la búsqueda Monte Carlo hasta horizonte t=${maxUnroll}.`,
+        paramEstimate: "GPU Memory Buffer (MCTS Search Tree Cache)",
+        receptiveField: "Generated by h(o) at t=0 or imagined by g(s, a) at t>0",
+        details: `Continuous latent space where Monte Carlo Tree Search projects candidate futures up to horizon t=${maxUnroll}.`,
       },
       action: {
         id: "action",
         name: "Action Conditioning a_t",
         math: `a_t \\in \\{0, \\dots, ${actionDim - 1}\\}`,
-        role: `Acción candidata seleccionada por el árbol MCTS (espacio de ${actionDim} acciones discretas).`,
-        inShape: `Índice discreto a_t (0 a ${actionDim - 1})`,
-        outShape: `B × 1 × ${boardH} × ${boardW} (Broadcast espacial)`,
+        role: `Candidate discrete tactical action selected during MCTS simulation (${actionDim} action space).`,
+        inShape: `Discrete action index a_t (0 to ${actionDim - 1})`,
+        outShape: `B × 1 × ${boardH} × ${boardW} (Spatial broadcast plane)`,
         architecture: [
-          `Linear Embedding (${actionDim} dims)`,
-          `Broadcast espacial constante sobre el plano 1×${boardH}×${boardW}`,
-          `Concatenación en canales con el estado latente (${hiddenDim} + 1 = ${hiddenDim + 1})`
+          `Linear Action Embedding (${actionDim} dimensions)`,
+          `Constant spatial broadcast across 1×${boardH}×${boardW} grid`,
+          `Channel-wise concatenation with latent state (${hiddenDim} + 1 = ${hiddenDim + 1})`
         ],
-        paramEstimate: `~${(actionDim * 32).toLocaleString()} parámetros`,
-        receptiveField: "Global (informa a todo el plano de la maniobra ejecutada)",
-        details: `Permite a la red de dinámica conocer qué orden o disparo se proyecta en la simulación imaginada.`,
+        paramEstimate: `~${(actionDim * 32).toLocaleString()} parameters`,
+        receptiveField: "Global (informs entire spatial board of candidate order)",
+        details: `Enables the recurrent dynamics model to predict combat outcome, movement transitions, and reaction fire for the executed action.`,
       },
       dynamics: {
         id: "dynamics",
         name: "Dynamics Network g_θ(s, a)",
         math: `g_\\theta(s_t, a_t) \\to (s_{t+1}, \\hat{r}_t)`,
-        role: `Modelo latente del mundo: predice la evolución del estado s_{t+1} y la recompensa inmediata tras ejecutar a_t.`,
-        inShape: `B × ${hiddenDim + 1} × ${boardH} × ${boardW} (Concatenación s_t + a_t)`,
-        outShape: `s_{t+1}: B × ${hiddenDim} × ${boardH} × ${boardW} | r_t: B × 1`,
+        role: "Recurrent latent world model: predicts the next latent state s_{t+1} and immediate reward r_t after executing action a_t.",
+        inShape: `B × ${hiddenDim + 1} × ${boardH} × ${boardW} (s_t + a_t concatenation)`,
+        outShape: `s_{t+1}: B × ${hiddenDim} × ${boardH} × ${boardW} | r_t: B × 1 (Two-Hot Support)`,
         architecture: isV2Optimized
           ? [
               `Conv2d(${hiddenDim + 1}, ${hiddenDim}, kernel_size=3, padding=1) + SiLU`,
               ...Array.from({ length: dynamicsBlocks }, (_, i) =>
                 `Dynamics Block ${i + 1}: Conv3x3(${hiddenDim}) -> GroupNorm -> SiLU -> Conv3x3 -> GroupNorm + Squeeze-and-Excitation (SE)`
               ),
-              `Reward Head: Conv1x1(${hiddenDim}, ${valCh}) -> GroupNorm -> SiLU -> AdaptiveAvgPool2d(2x2) -> Linear(${valCh * 4}, 64) -> SiLU -> Linear(64, 1)`,
-              "Min-Max Recurrent Latent Scaling en cada paso recurrente"
+              `Reward Head: Conv1x1(${hiddenDim}, ${valCh}) -> GroupNorm -> SiLU -> AdaptiveAvgPool2d(2x2) -> Linear(${valCh * 4}, 64) -> SiLU -> Linear(64, 601)`,
+              "Two-Hot Categorical Reward Distribution ([-300, 300] support bounds)",
+              "Min-Max Recurrent Latent Scaling per imagination step"
             ]
           : [
               `Conv2d(${hiddenDim + 1}, ${hiddenDim}, kernel_size=3, padding=1) + ReLU`,
@@ -718,19 +744,54 @@ export function NetworkTopologyTab({
               ),
               `Reward Head: Flatten(${flatDim}) -> Linear(${flatDim}, 64) -> SiLU -> Linear(64, 1)`
             ],
-        paramEstimate: `~${dynParams.toLocaleString()} parámetros`,
-        receptiveField: `~${dynReceptive}×${dynReceptive} Hexágonos acumulados por paso`,
+        paramEstimate: `~${dynParams.toLocaleString()} parameters`,
+        receptiveField: `~${dynReceptive}×${dynReceptive} Hexes accumulated per step`,
         details: isV2Optimized
-          ? `Modelo recurrente v2 optimizado: utiliza cuello de botella 1x1 + AdaptiveAvgPool en la recompensa y re-escalado latente Min-Max, evitando explosión o desvanecimiento del gradiente en BPTT.`
-          : `Modelo recurrente v1 clásico con cabezal de recompensa denso conectado directamente al mapa espacial aplanado.`,
+          ? `Optimized V2 recurrent model: utilizes 1x1 bottlenecks + AdaptiveAvgPool in reward prediction and Min-Max latent re-scaling, preventing gradient vanishing or explosion during deep BPTT.`
+          : `Classic V1 recurrent model with dense reward head connected directly to flattened spatial map.`,
+      },
+      manager_network: {
+        id: "manager_network",
+        name: "Strategic Manager Network (H-EZ-M v3.0)",
+        math: `\\pi_{manager}(o_t, c_{topo}) \\to (g_T^{\\text{spatial}} \\in [0, 1]^{16 \\times 16}, m_T \\in \\{1..4\\})`,
+        role: "High-level strategic commander operating at macro-cycles (T <= 8 turns). Evaluates global battlefield topography (IPB) and generates macro-goals that condition tactical MCTS workers.",
+        inShape: `B × (38 + 5) × ${boardH} × ${boardW} (Sensory Observation + 5D Topography IPB)`,
+        outShape: `Spatial Goal Heatmap: B × 1 × ${boardH} × ${boardW} + Tactical Mode: B × 4`,
+        architecture: [
+          `Global Topography Encoder: Conv3x3 -> GroupNorm -> SiLU`,
+          `Residual Macro Blocks: 4 ResidualBlocks with Spatial Squeeze-and-Excitation`,
+          `Spatial Goal Head: Conv1x1 -> Sigmoid (16x16 Heatmap)`,
+          `Tactical Mode Head: AdaptiveAvgPool -> Linear -> Softmax (Assault, Defend, Suppress, Screen)`,
+          `SpatialGoalFiLMBridge: Multi-modal modulation coupling Manager goals into Worker MCTS`
+        ],
+        paramEstimate: "~850,000 parameters",
+        receptiveField: "Global Map Resolution (Full Board View)",
+        details: "Resolves temporal and spatial scale mismatch by decoupling macro objective planning from local hex movement, guiding tactical workers to execute coordinated assaults.",
+      },
+      loss_balancer: {
+        id: "loss_balancer",
+        name: "Adaptive Loss Balancer & Multi-Task PCGrad",
+        math: `g_i \\leftarrow g_i - \\frac{g_i \\cdot g_j}{\\|g_j\\|^2} g_j \\quad (\\text{if } g_i \\cdot g_j < 0)`,
+        role: "Dynamic gradient surgery and multi-head loss balancing. Projects conflicting gradients onto orthogonal planes to prevent negative transfer between disparate scenarios.",
+        inShape: "Per-task Gradients g_i, g_j + Head Losses (Policy, Value, Consistency, Aux)",
+        outShape: "Conflict-Free Combined Gradient Vector \\nabla_\\theta \\mathcal{L}",
+        architecture: [
+          "Gradient Surgery (PCGrad): Orthogonal projection for pairs with negative inner product",
+          "Cosine Similarity Telemetry: CosSim(i, j) exported to MLOps for cross-scenario transfer forensics",
+          "GradNorm Adaptive Weighting: Balances gradient norms across auxiliary heads dynamically",
+          "Two-Hot Categorical Value Support: 601 bins ([-300, 300]) with smooth label distribution"
+        ],
+        paramEstimate: "Dynamic Optimizer Operator (Zero Inference Overhead)",
+        receptiveField: "Global Gradient Parameter Space",
+        details: "Prevents urban assault gradients from overriding open terrain maneuvers, ensuring continuous Pareto improvements across all curriculum phases simultaneously.",
       },
       policy: {
         id: "policy",
         name: "Policy Head f_p(s)",
         math: `p_t = f_p(s_t) \\in \\Delta^{${actionDim}}`,
-        role: `Predicción de probabilidades previas (prior) sobre las ${actionDim} acciones posibles del juego.`,
+        role: `Prior probability distribution over the ${actionDim} available discrete game actions.`,
         inShape: `B × ${hiddenDim} × ${boardH} × ${boardW}`,
-        outShape: `B × ${actionDim} logits (Normalizados con Softmax y acción legal masking)`,
+        outShape: `B × ${actionDim} logits (Normalized with Softmax and legal action masking)`,
         architecture: isV2Optimized
           ? [
               ...Array.from({ length: predictionBlocks }, (_, i) =>
@@ -738,50 +799,51 @@ export function NetworkTopologyTab({
               ),
               `Conv1x1 Bottleneck: Conv2d(${hiddenDim}, ${headCh}, 1x1) + GroupNorm + SiLU`,
               `Linear Head: Flatten(${flatPol}) -> Linear(${flatPol}, ${actionDim}) (Logits)`,
-              "Pérdida de Política: Cross-Entropy / Divergencia KL (gradientes lineales sin atenuación)"
+              "Policy Loss: Cross-Entropy / KL-Divergence with non-attenuated linear gradients"
             ]
           : [
               ...Array.from({ length: predictionBlocks }, (_, i) =>
                 `Prediction Block ${i + 1}: Conv3x3(${hiddenDim}) -> LayerNorm -> ReLU`
               ),
               `Direct Flatten: Flatten(${flatDim}) -> Linear(${flatDim}, ${actionDim})`,
-              "Pérdida de Política: MSE sobre Softmax (atenuación de gradientes con p pequeños)"
+              "Policy Loss: MSE over Softmax (gradient attenuation on small p)"
             ],
-        paramEstimate: `~${polParams.toLocaleString()} parámetros`,
-        receptiveField: "Global (Cuello de botella convolucional)",
+        paramEstimate: `~${polParams.toLocaleString()} parameters`,
+        receptiveField: "Global (Convolutional Bottleneck)",
         details: isV2Optimized
-          ? `Cabezal de política v2 con cuello de botella 1x1 (${hiddenDim}ch ➔ ${headCh}ch), reduciendo drásticamente los parámetros frente a la memorización espacial de coordenadas. Entrenado con Cross-Entropy.`
-          : `Cabezal v1 clásico con capa lineal gigante conectada directamente a todas las celdas aplanadas (~${(flatDim * actionDim).toLocaleString()} parámetros solo en la proyección lineal).`,
+          ? `V2 policy head with 1x1 bottleneck (${hiddenDim}ch ➔ ${headCh}ch), drastically reducing parameter count and preventing coordinate memorization. Trained with Cross-Entropy.`
+          : `Classic V1 head with dense linear layer connecting to all flattened cells (~${(flatDim * actionDim).toLocaleString()} parameters in linear projection alone).`,
       },
       value: {
         id: "value",
-        name: "Value Head f_v(s)",
-        math: `v_t = f_v(s_t) \\in [-1, 1]`,
-        role: "Evaluación escalar de la probabilidad esperada de victoria.",
+        name: "Value Head f_v(s) (Two-Hot Support)",
+        math: `v_t = f_v(s_t) \\in [-300, 300] \\implies \\text{Two-Hot Categorical Support (601 bins)}`,
+        role: "Scalar state value evaluation representing expected discounted game outcome and victory margin.",
         inShape: `B × ${hiddenDim} × ${boardH} × ${boardW}`,
-        outShape: "B × 1 (Escalar continuo en [-1, 1] con función Tanh)",
+        outShape: "B × 601 Logits (Two-hot categorical distribution over scalar support)",
         architecture: isV2Optimized
           ? [
               `Conv1x1 Bottleneck: Conv2d(${hiddenDim}, ${valCh}, 1x1) + GroupNorm + SiLU`,
-              `AdaptiveAvgPool2d((2, 2)) (Invarianza espacial y compresión)`,
-              `Linear(${valCh * 4}, 64) -> SiLU -> Linear(64, 1) + Tanh`
+              `AdaptiveAvgPool2d((2, 2)) (Spatial invariance and compression)`,
+              `Linear(${valCh * 4}, 64) -> SiLU -> Linear(64, 601) (Categorical Support Bins)`,
+              "Two-Hot Cross-Entropy Loss: Invertible scalar mapping with bounded gradient variance"
             ]
           : [
               `Direct Flatten: Flatten(${flatDim}) -> Linear(${flatDim}, 64) -> SiLU -> Linear(64, 1) + Tanh`
             ],
-        paramEstimate: `~${valParams.toLocaleString()} parámetros`,
+        paramEstimate: `~${valParams.toLocaleString()} parameters`,
         receptiveField: "Global",
         details: isV2Optimized
-          ? `Cabezal de valor v2 con compresión espacial AdaptiveAvgPool(2,2). Evalúa la posición estratégica global sin saturar pesos lineales con la posición exacta de cada casilla.`
-          : `Cabezal v1 clásico conectado a todo el mapa aplanado.`,
+          ? `V2 value head utilizing two-hot categorical representation over 601 support bins ([-300, 300]). Eliminates regression scale instability and prevents value collapse during sudden game reversals.`
+          : `Classic V1 head connected to raw flattened board.`,
       },
       aux_objective: {
         id: "aux_objective",
         name: "Objective Progress Head f_o(s)",
         math: `y_t = f_o(s_t) \\in \\mathbb{R}`,
-        role: "Predicción auxiliar del progreso y proximidad táctica a Puntos de Victoria (VPs).",
+        role: "Auxiliary prediction head estimating progress and proximity to Victory Points (VPs).",
         inShape: `B × ${hiddenDim} × ${boardH} × ${boardW}`,
-        outShape: "B × 1 (Predicción de captura/progreso continuo)",
+        outShape: "B × 1 (Continuous capture progress & proximity estimation)",
         architecture: isV2Optimized
           ? [
               `Conv1x1 Bottleneck: Conv2d(${hiddenDim}, ${valCh}, 1x1) + GroupNorm + SiLU`,
@@ -791,31 +853,32 @@ export function NetworkTopologyTab({
           : [
               `Direct Flatten: Flatten(${flatDim}) -> Linear(${flatDim}, 32) -> SiLU -> Linear(32, 1)`
             ],
-        paramEstimate: `~${objParams.toLocaleString()} parámetros`,
-        receptiveField: "Global / Localizado en hexágonos VP",
-        details: "Guía el entrenamiento para favorecer la toma de objetivos frente al estancamiento pasivo.",
+        paramEstimate: `~${objParams.toLocaleString()} parameters`,
+        receptiveField: "Global / Localized to VP hexes",
+        details: "Guides reinforcement learning to prioritize objective capture over passive camping.",
       },
       consistency: {
         id: "consistency",
-        name: "Consistency Head q_θ(s)",
+        name: "Consistency Head q_θ(s) (Fast Vectorized)",
         math: `z_t = q_\\theta(s_t) \\in \\mathbb{R}^{B \\times ${hiddenDim}}`,
-        role: `Proyector de auto-consistencia SimSiam (horizonte de ${consistencyUnroll} pasos).`,
+        role: `SimSiam self-supervised consistency projector (${consistencyUnroll}-step unroll horizon) with batched single-pass reanalysis.`,
         inShape: `B × ${hiddenDim} × ${boardH} × ${boardW}`,
-        outShape: `B × ${hiddenDim} (Vector de embedding latente)`,
+        outShape: `B × ${hiddenDim} (Latent embedding vector)`,
         architecture: isV2Optimized
           ? [
               `Conv1x1 Bottleneck: Conv2d(${hiddenDim}, ${headCh}, 1x1) + SiLU`,
               `AdaptiveAvgPool2d((4, 4))`,
               `MLP Projector: Linear(${headCh * 16}, 128) -> SiLU -> Linear(128, 128)`,
-              "Pérdida SimSiam: Cosine Similarity con Stop-Gradient"
+              "Single-Pass Vectorized Target Batching: Zero redundant forward passes in replay buffer",
+              "SimSiam Loss: Negative Cosine Similarity with Stop-Gradient on target representations"
             ]
           : [
               `Direct Flatten: Flatten(${flatDim}) -> Linear(${flatDim}, 128) -> SiLU -> Linear(128, 128)`,
-              "Pérdida SimSiam: Cosine Similarity con Stop-Gradient"
+              "SimSiam Loss: Cosine Similarity with Stop-Gradient"
             ],
-        paramEstimate: `~${conParams.toLocaleString()} parámetros`,
+        paramEstimate: `~${conParams.toLocaleString()} parameters`,
         receptiveField: "Global",
-        details: `Evita el colapso de representación durante el unroll temporal, forzando a que s_t habite la misma variedad semántica que las observaciones reales.`,
+        details: `Prevents latent representation collapse during temporal unrolling, forcing s_t to inhabit the same semantic manifold as physical observations.`,
       },
       ...(hasThreatHead
         ? {
@@ -823,24 +886,24 @@ export function NetworkTopologyTab({
               id: "threat_map",
               name: "Threat Map Head f_threat(s)",
               math: `m_t = f_{threat}(s_t) \\in [0, 1]^{B \\times 1 \\times ${boardH} \\times ${boardW}}`,
-              role: `Mapa espacial 2D de riesgo de supresión y líneas de tiro enemigas sobre la cuadrícula hexagonal ${boardH}×${boardW}.`,
+              role: `2D spatial heatmap predicting suppression risk and enemy lines of fire across the ${boardH}×${boardW} hexagonal board.`,
               inShape: `B × ${hiddenDim} × ${boardH} × ${boardW}`,
-              outShape: `B × 1 × ${boardH} × ${boardW} (Probabilidades de fuego / LOS)`,
+              outShape: `B × 1 × ${boardH} × ${boardW} (Fire / LOS risk probabilities)`,
               architecture: isV2Optimized
                 ? [
-                    `SpatialAttentionBlock: Self-Attention espacial (${hiddenDim}ch)`,
+                    `SpatialAttentionBlock: Self-Attention across ${hiddenDim} spatial channels`,
                     `Conv2d(${hiddenDim}, 16, kernel_size=3, padding=1) + GroupNorm + SiLU`,
-                    "Conv2d(16, 1, kernel_size=1) (Logits de cobertura de fuego)",
-                    "Pérdida de Amenaza: BCEWithLogitsLoss con balanceo adaptativo"
+                    "Conv2d(16, 1, kernel_size=1) (Fire coverage logits)",
+                    "Threat Loss: BCEWithLogitsLoss with adaptive loss balancing"
                   ]
                 : [
                     `Conv2d(${hiddenDim}, 16, kernel_size=3, padding=1) + GroupNorm + SiLU`,
                     "Conv2d(16, 1, kernel_size=1)",
-                    "Pérdida de Amenaza: BCEWithLogitsLoss"
+                    "Threat Loss: BCEWithLogitsLoss"
                   ],
-              paramEstimate: `~${(hiddenDim * 16 * 9 + 16 * 1).toLocaleString()} parámetros`,
-              receptiveField: `Local / Espacial (${boardH}×${boardW} Hexágonos)`,
-              details: "Cabezal táctico de amenaza activa: predice la probabilidad de recibir fuego en cada hexágono, guiando al agente a navegar tras coberturas y fuera de líneas de tiro enemigas.",
+              paramEstimate: `~${(hiddenDim * 16 * 9 + 16 * 1).toLocaleString()} parameters`,
+              receptiveField: `Local / Spatial (${boardH}×${boardW} Hexes)`,
+              details: "Active threat auxiliary head: estimates probability of taking incoming fire in each hex, incentivizing tactical navigation through defilade and cover.",
             },
           }
         : {}),
@@ -850,23 +913,23 @@ export function NetworkTopologyTab({
               id: "attrition",
               name: "Attrition Balance Head f_attr(s)",
               math: `a_t = f_{attr}(s_t) \\in \\mathbb{R}^{B \\times 2}`,
-              role: "Proyección táctica del balance de bajas esperadas (bajas aliadas vs. bajas enemigas proyectadas).",
+              role: "Tactical casualty projection predicting expected friendly vs enemy losses.",
               inShape: `B × ${hiddenDim} × ${boardH} × ${boardW}`,
-              outShape: "B × 2 (Bajas amigas estimadas, Bajas enemigas estimadas)",
+              outShape: "B × 2 (Estimated friendly casualties, Estimated enemy casualties)",
               architecture: isV2Optimized
                 ? [
                     `SpatialAttentionBlock: Pooled Context (${valCh}ch)`,
                     "Flatten() -> Linear(64) -> SiLU -> Linear(64, 2)",
-                    "Pérdida de Desgaste: Smooth L1 Loss (Huber) balanceada"
+                    "Attrition Loss: Smooth L1 Loss (Huber) with adaptive gradient balancing"
                   ]
                 : [
                     `Conv1x1 Bottleneck: Conv2d(${hiddenDim}, ${valCh}, 1x1) + SiLU`,
                     `Flatten(${flatVal}) -> Linear(64) -> SiLU -> Linear(64, 2)`,
-                    "Pérdida de Desgaste: Smooth L1 Loss"
+                    "Attrition Loss: Smooth L1 Loss"
                   ],
-              paramEstimate: `~${(hiddenDim * valCh + flatVal * 64 + 64 * 2).toLocaleString()} parámetros`,
+              paramEstimate: `~${(hiddenDim * valCh + flatVal * 64 + 64 * 2).toLocaleString()} parameters`,
               receptiveField: "Global",
-              details: "Discrimina victorias tácticas limpias de victorias pírricas con alto desgaste, evitando sacrificios innecesarios de unidades.",
+              details: "Discriminates clean tactical victories from pyrrhic victories with catastrophic squad losses.",
             },
           }
         : {}),
@@ -876,47 +939,46 @@ export function NetworkTopologyTab({
               id: "morale",
               name: "Morale State Head f_morale(s)",
               math: `m_t = f_{morale}(s_t) \\in \\Delta^4`,
-              role: "Distribución de probabilidad sobre estados de moral táctica: NORMAL (0), PINNED (1), SUPPRESSED (2), ROUTED (3).",
+              role: "Probability distribution over tactical cohesion states: NORMAL (0), PINNED (1), SUPPRESSED (2), ROUTED (3).",
               inShape: `B × ${hiddenDim} × ${boardH} × ${boardW}`,
-              outShape: "B × 4 (Distribución de probabilidad con Softmax)",
+              outShape: "B × 4 (Categorical distribution with Softmax)",
               architecture: isV2Optimized
                 ? [
                     `SpatialAttentionBlock: Pooled Context (${valCh}ch)`,
                     "Flatten() -> Linear(64) -> SiLU -> Linear(64, 4)",
-                    "Pérdida de Moral: Categorical Cross-Entropy con clases ponderadas"
+                    "Morale Loss: Categorical Cross-Entropy with class-weighted penalties"
                   ]
                 : [
                     `Conv1x1 Bottleneck: Conv2d(${hiddenDim}, ${valCh}, 1x1) + SiLU`,
                     `Flatten(${flatVal}) -> Linear(64) -> SiLU -> Linear(64, 4)`,
-                    "Pérdida de Moral: Categorical Cross-Entropy"
+                    "Morale Loss: Categorical Cross-Entropy"
                   ],
-              paramEstimate: `~${(hiddenDim * valCh + flatVal * 64 + 64 * 4).toLocaleString()} parámetros`,
+              paramEstimate: `~${(hiddenDim * valCh + flatVal * 64 + 64 * 4).toLocaleString()} parameters`,
               receptiveField: "Global",
-              details: "Predice la probabilidad de degradación de moral y supresión de escuadras bajo fuego, promoviendo repliegues tácticos preventivos.",
+              details: "Predicts suppression degradation and squad rout probability under fire, encouraging proactive tactical withdrawals.",
             },
           }
         : {}),
       macro_planner: {
         id: "macro_planner",
-        name: "Planificador Macro & Perfilado Doctrinal (Jerarquía 3 Capas)",
-        math: `\\pi_{macro}(o_t) \\to (\\text{Postura}, \\text{Roles}_{[1..8]}, \\text{Mutaciones}) \\implies P_{mod}(a)`,
-        role: "Planificador estratégico de nivel superior (Nivel 1 de la jerarquía HRL v2.4.5). Evalúa el escenario completo, asigna la postura doctrinal global del equipo (ASSAULT_VP, DEFENSIVE_HOLD, ZONE_SUPPRESS), distribuye los 8 roles canónicos por unidad según su perfil doctrinal, y aplica reglas jerárquicas de mutación contextual modulando directamente los priors en la raíz del árbol MCTS (+35% π).",
-        inShape: `B × ${inChannels} × ${boardH} × ${boardW} (Observación Directa del Tablero)`,
-        outShape: `3 Posturas + 8 Roles Canónicos + 3 Reglas de Mutación Contextual + Prior Shaping (+35%)`,
+        name: "Macro Planner & Doctrinal Profiling (H-EZ-M 4-Tier Hierarchy)",
+        math: `\\pi_{macro}(o_t) \\to (\\text{Posture}, \\text{Roles}_{[1..8]}, \\text{Mutations}) \\implies P_{mod}(a)`,
+        role: "Strategic tactical planner operating as Level 1 of H-EZ-M. Evaluates the full board, assigns global team posture (ASSAULT_VP, DEFENSIVE_HOLD, ZONE_SUPPRESS), distributes 8 canonical roles per squad, and injects +35% π prior shaping at the root of the MCTS worker tree.",
+        inShape: `B × ${inChannels} × ${boardH} × ${boardW} (Board Observation Tensor)`,
+        outShape: "3 Postures + 8 Canonical Roles + 3 Contextual Mutation Rules + Prior Shaping (+35%)",
         architecture: [
-          "Capa 1: Invariantes Físico-Balísticas VOEC (Reglas, alcances, LOS, costes y resolución balística estricta)",
-          "Capa 2: Sesgo Doctrinal Inductivo y 8 Roles Canónicos (Spearhead, Fire Support, Close Def, Recon, Defender, Screen, Reserve, Recover)",
-          "3 Reglas Jerárquicas de Mutación Contextual (Presión VPs -> Spearhead, Moral/HP -> Recover, Aislamiento -> Close Defense)",
-          "Doctrina de Reserva Táctica Dunnigan & Cohesión Hyde (Supported / Friends Close / Isolated)",
-          "Modulación de Priors MCTS en Raíz: P_mod(a) = P(a) * (1 + α * Boost(Postura, Rol, a)) con +35%",
-          "Capa 3: Micro-táctica Autónoma Emergente (512 sims PUCT, 6 unroll, reanálisis off-policy, anulación por Q(s, a))"
+          "Tier 1: VOEC Physical & Ballistic Invariants (Strict LOS, ranges, movement costs, and dice resolution)",
+          "Tier 2: H-EZ-M Strategic Manager Network (Macro-goals g_T, 16x16 spatial heatmap, tactical modes)",
+          "Tier 3: Inductive Doctrinal Profiler (8 Canonical Roles, Dunnigan Tactical Reserve, Hyde Cohesion, +35% prior shaping)",
+          "Tier 4: Autonomous Tactical Operator (512 MCTS sims, 6-step unroll, off-policy reanalysis, Q(s,a) override)",
+          "Prospective: TemplateRL Hybrid LLM+RL Strategic Macro-Planner (Line 4 / v2.6.0 roadmap alignment)"
         ],
-        paramEstimate: "Módulo Lógico-Estratégico HRL con Ponderación Doctrinal de 3 Capas",
-        receptiveField: "Global (Todo el tablero, footprints 2D y estado dinámico de unidades)",
-        details: "Actúa como Nivel 1 de la jerarquía de toma de decisiones. Impide que la búsqueda MCTS local (Nivel 2) se extravíe en mínimos locales o bucles pasivos al sesgar la exploración hacia los objetivos tácticos definidos, manteniendo a la vez flexibilidad absoluta si Q(s,a) descubre una jugada superior imprevista.",
+        paramEstimate: "Hierarchical Decoupled Architecture (Manager + Doctrinal Profiler + MCTS Worker)",
+        receptiveField: "Global (Full board topography, 2D weapon footprints, dynamic squad state)",
+        details: "Prevents local MCTS search from falling into passive deadlocks by biasing exploration towards designated strategic objectives, while maintaining full flexibility for Q(s,a) to override when a superior move is found.",
       },
     };
-  }, [inChannels, boardH, boardW, hiddenDim, actionDim, dynamicsBlocks, predictionBlocks, encoderType, maxUnroll, consistencyUnroll, runId, mctsSims, isV2Optimized, hasThreatHead, hasAttritionHead, hasMoraleHead]);
+  }, [inChannels, boardH, boardW, hiddenDim, actionDim, dynamicsBlocks, predictionBlocks, encoderType, maxUnroll, consistencyUnroll, runId, mctsSims, isV2Optimized, hasThreatHead, hasAttritionHead, hasMoraleHead, enableMultitask, numTasks, taskEmbedDim]);
 
   const selectedNode = dynamicNodeCatalog[selectedNodeId] || dynamicNodeCatalog.representation;
 
@@ -937,49 +999,49 @@ export function NetworkTopologyTab({
       {
         id: "policy",
         icon: "🎯",
-        label: "POLÍTICA f_p(s)",
+        label: "POLICY f_p(s)",
         sublabel: `${actionDim} Logits ${isV2Optimized ? "(Conv 1x1)" : "(Dense)"}`,
         stroke: "#38bdf8",
         selectedFill: "#0369a1",
         metricLabel: `Loss: ${fmtNum(polLoss, 3)} | Conf: ${fmtPercent(polConfidence)}`,
         metricValue: fmtNum(polLoss, 3),
-        tag: polLoss !== null ? "🟢 OK" : "⚪ PENDIENTE",
+        tag: polLoss !== null ? "🟢 OK" : "⚪ PENDING",
         tagColor: polLoss !== null ? "#34d399" : "#94a3b8",
       },
       {
         id: "value",
         icon: "⚖️",
-        label: "VALOR f_v(s)",
-        sublabel: `Escalar [-1.0, +1.0] ${isV2Optimized ? "(Pool 2x2)" : "(Dense)"}`,
+        label: "VALUE f_v(s) (Two-Hot)",
+        sublabel: `Two-Hot [-300, 300] (601 bins) ${isV2Optimized ? "(Pool 2x2)" : "(Dense)"}`,
         stroke: "#22c55e",
         selectedFill: "#065f46",
         metricLabel: `Loss: ${fmtNum(valLoss, 3)} | Q-Sat: ${fmtPercent(qSatRate)}`,
         metricValue: fmtNum(valLoss, 3),
-        tag: valLoss !== null ? "🟢 OK" : "⚪ PENDIENTE",
+        tag: valLoss !== null ? "🟢 OK" : "⚪ PENDING",
         tagColor: valLoss !== null ? "#34d399" : "#94a3b8",
       },
       {
         id: "aux_objective",
         icon: "🏁",
-        label: "OBJETIVO AUXILIAR f_o(s)",
-        sublabel: `Progreso VP ${isV2Optimized ? "(Pool 2x2)" : "(Dense)"}`,
+        label: "AUX OBJECTIVE f_o(s)",
+        sublabel: `VP Proximity ${isV2Optimized ? "(Pool 2x2)" : "(Dense)"}`,
         stroke: "#f43f5e",
         selectedFill: "#9f1239",
         metricLabel: `Loss: ${fmtNum(objLoss, 3)} | Take: ${fmtPercent(objTakeRate)}`,
         metricValue: fmtNum(objLoss, 3),
-        tag: objLoss !== null ? "🟢 OK" : "⚪ PENDIENTE",
+        tag: objLoss !== null ? "🟢 OK" : "⚪ PENDING",
         tagColor: objLoss !== null ? "#34d399" : "#94a3b8",
       },
       {
         id: "consistency",
         icon: "🔄",
-        label: "CONSISTENCIA q_θ(s)",
-        sublabel: `SimSiam ${isV2Optimized ? "(Pool 4x4)" : `(${hiddenDim} Flat)`}`,
+        label: "CONSISTENCY q_θ(s) (Fast)",
+        sublabel: `SimSiam Vectorized ${isV2Optimized ? "(Pool 4x4)" : `(${hiddenDim} Flat)`}`,
         stroke: "#c084fc",
         selectedFill: "#581c87",
         metricLabel: `Loss: ${fmtSci(conLoss)} | Cov: ${fmtPercent(conReanalysisCov, 0)}`,
         metricValue: fmtSci(conLoss),
-        tag: conLoss !== null ? "🟢 OK" : "⚪ PENDIENTE",
+        tag: conLoss !== null ? "🟢 OK" : "⚪ PENDING",
         tagColor: conLoss !== null ? "#34d399" : "#94a3b8",
       },
     ];
@@ -988,7 +1050,7 @@ export function NetworkTopologyTab({
       list.push({
         id: "threat_map",
         icon: "🗺️",
-        label: "AMENAZA / SUPRESIÓN f_threat(s)",
+        label: "THREAT MAP f_threat(s)",
         sublabel: `Heatmap 1×${boardH}×${boardW} (LOS/Overwatch)`,
         stroke: "#eab308",
         selectedFill: "#854d0e",
@@ -1003,8 +1065,8 @@ export function NetworkTopologyTab({
       list.push({
         id: "attrition",
         icon: "⚔️",
-        label: "DESGASTE / BAJAS f_attr(s)",
-        sublabel: "Vector [Bajas Aliadas, Bajas Enemigas]",
+        label: "ATTRITION BALANCE f_attr(s)",
+        sublabel: "2D Vector [Friendly Casualties, Enemy Casualties]",
         stroke: "#06b6d4",
         selectedFill: "#0e7490",
         metricLabel: `Loss: ${fmtNum(attritionLoss, 3)} | Ratio: ${fmtNum(attritionExchange, 2, "x")}`,
@@ -1018,11 +1080,11 @@ export function NetworkTopologyTab({
       list.push({
         id: "morale",
         icon: "🛡️",
-        label: "ESTADO DE MORAL f_morale(s)",
-        sublabel: "4 Clases (Normal / Pin / Supp / Rout)",
+        label: "MORALE COHESION f_morale(s)",
+        sublabel: "4 Classes (Normal / Pinned / Suppressed / Routed)",
         stroke: "#ec4899",
         selectedFill: "#9d174d",
-        metricLabel: `Loss: ${fmtNum(moraleLoss, 3)} | Riesgo: ${fmtNum(moraleRisk, 2)}`,
+        metricLabel: `Loss: ${fmtNum(moraleLoss, 3)} | Risk: ${fmtNum(moraleRisk, 2)}`,
         metricValue: fmtNum(moraleLoss, 3),
         tag: "TACTICAL",
         tagColor: "#fbcfe8",
@@ -1041,7 +1103,7 @@ export function NetworkTopologyTab({
   const numHeads = activeHeads.length;
   const cardH = numHeads <= 4 ? 52 : numHeads <= 5 ? 46 : 42;
   const cardGap = numHeads <= 4 ? 8 : numHeads <= 5 ? 6 : 5;
-  const svgHeight = Math.max(265, 12 + numHeads * (cardH + cardGap) + 8);
+  const svgHeight = Math.max(340, 12 + numHeads * (cardH + cardGap) + 8);
 
   // Resilient channels parser supporting both array and dictionary shapes
   const dynamicChannelsList = useMemo(() => {
@@ -1068,7 +1130,7 @@ export function NetworkTopologyTab({
             : name.includes("turn") || name.includes("done")
             ? "global"
             : "units",
-          desc: `Canal de entrada ${i}: ${name} (${nonzero} celdas activas)`,
+          desc: `Input Channel ${i}: ${name} (${nonzero} active cells)`,
         };
       });
     }
@@ -1087,28 +1149,28 @@ export function NetworkTopologyTab({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <div>
           <h3 style={{ margin: 0, fontSize: 16, color: "#38bdf8", display: "flex", alignItems: "center", gap: 6 }}>
-            <span>🧠</span> Topología Dinámica de la Red Neuronal (EfficientZero V2)
+            <span>🧠</span> Dynamic Neural Network Topology (EfficientZero V2 / EZ-M)
           </h3>
           <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-            Arquitectura desacoplada: Representación \(h\), Dinámica Recurrente \(g\), Cabezales de Predicción \(f\) y Consistencia Auto-supervisada \(z\).
+            Decoupled architecture: Representation (h), Recurrent Dynamics (g), Prediction Heads (f), Self-Supervised Consistency (z), and Multi-Task FiLM Conditioning.
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <div className="kpi" style={{ padding: "4px 8px" }}>
-            <div className="k" style={{ fontSize: 10 }}>Encoder / Latente</div>
+            <div className="k" style={{ fontSize: 10 }}>Encoder / Latent</div>
             <div className="v" style={{ fontSize: 11, color: "#38bdf8" }}>{encoderType.toUpperCase()} ({hiddenDim} ch)</div>
           </div>
           <div className="kpi" style={{ padding: "4px 8px" }}>
-            <div className="k" style={{ fontSize: 10 }}>Acciones</div>
+            <div className="k" style={{ fontSize: 10 }}>Action Space</div>
             <div className="v" style={{ fontSize: 11, color: "#22c55e" }}>{actionDim} logits</div>
           </div>
           <div className="kpi" style={{ padding: "4px 8px" }}>
-            <div className="k" style={{ fontSize: 10 }}>Unroll Máx</div>
-            <div className="v" style={{ fontSize: 11, color: "#f59e0b" }}>{maxUnroll} pasos</div>
+            <div className="k" style={{ fontSize: 10 }}>Max Unroll</div>
+            <div className="v" style={{ fontSize: 11, color: "#f59e0b" }}>{maxUnroll} steps</div>
           </div>
           <div className="kpi" style={{ padding: "4px 8px" }}>
-            <div className="k" style={{ fontSize: 10 }}>Precisión</div>
+            <div className="k" style={{ fontSize: 10 }}>Precision</div>
             <div className="v" style={{ fontSize: 11, color: "#a855f7" }}>{ampDtype}</div>
           </div>
         </div>
@@ -1174,7 +1236,7 @@ export function NetworkTopologyTab({
           >
             <span>♟️</span>
             <span>Macro Planner &amp; Doctrine</span>
-            <span style={{ fontSize: 9, background: "#581c87", color: "#d8b4fe", padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>8 Roles • v2.4.5</span>
+            <span style={{ fontSize: 9, background: "#581c87", color: "#d8b4fe", padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>H-EZ-M v3.0 • 8 Roles</span>
           </button>
         </div>
 
@@ -1192,9 +1254,9 @@ export function NetworkTopologyTab({
               fontWeight: diagramSize === "compact" ? 700 : 500,
               cursor: "pointer",
             }}
-            title="Vista compacta (menor altura vertical)"
+            title="Compact view (reduced vertical height)"
           >
-            📏 Compacto
+            📏 Compact
           </button>
           <button
             onClick={() => setDiagramSize("balanced")}
@@ -1208,9 +1270,9 @@ export function NetworkTopologyTab({
               fontWeight: diagramSize === "balanced" ? 700 : 500,
               cursor: "pointer",
             }}
-            title="Vista equilibrada: texto nítido y proporciones completas"
+            title="Balanced view: crisp text and full proportions"
           >
-            📐 Equilibrado
+            📐 Balanced
           </button>
           <button
             onClick={() => setDiagramSize("expanded")}
@@ -1474,7 +1536,7 @@ export function NetworkTopologyTab({
               fontWeight: 700,
             }}
           >
-            ⚡ Arquitectura v2: GroupNorm + SE + Conv Bottlenecks (-76% Params)
+            ⚡ Architecture v2: GroupNorm + SE + Conv Bottlenecks + EZ-M Multi-Task
           </span>
         ) : (
           <span
@@ -1488,18 +1550,18 @@ export function NetworkTopologyTab({
               fontWeight: 600,
             }}
           >
-            📦 Arquitectura v1: Dense Flattened (Legacy Run)
+            📦 Architecture v1: Dense Flattened (Legacy Run)
           </span>
         )}
 
         <div style={{ marginLeft: "auto", fontSize: 11, color: "#94a3b8", display: "flex", alignItems: "center", gap: 10 }}>
           {modelCfg.total_parameters ? (
             <span style={{ color: "#f59e0b", fontWeight: 700 }}>
-              {Number(modelCfg.total_parameters).toLocaleString()} params (Medido)
+              {Number(modelCfg.total_parameters).toLocaleString()} params (Measured)
             </span>
           ) : null}
           <span>
-            Dimensiones: <b>{inChannels}ch × {boardH}×{boardW}</b> ➔ Latente <b>{hiddenDim}ch</b> ➔ Bloques <b>{dynamicsBlocks}D + {predictionBlocks}P</b>
+            Dimensions: <b>{inChannels}ch × {boardH}×{boardW}</b> ➔ Latent <b>{hiddenDim}ch</b> ➔ Blocks <b>{dynamicsBlocks}D + {predictionBlocks}P</b>
           </span>
         </div>
       </div>
@@ -1537,11 +1599,11 @@ export function NetworkTopologyTab({
                 borderRadius: 4,
               }}
             >
-              <span>{isPlaying ? "⏸ Pausar" : "▶ Reproducir Flujo"}</span>
+              <span>{isPlaying ? "⏸ Pause Flow" : "▶ Play Unroll Flow"}</span>
             </button>
 
             <span style={{ fontSize: 12, fontWeight: 700, color: "#f8fafc" }}>
-              Paso de Proyección: <span style={{ color: "#38bdf8" }}>t = {unrollStep}</span> de {maxUnroll}
+              Projection Step: <span style={{ color: "#38bdf8" }}>t = {unrollStep}</span> of {maxUnroll}
             </span>
           </div>
 
@@ -1564,7 +1626,7 @@ export function NetworkTopologyTab({
                   cursor: "pointer",
                 }}
               >
-                {step === 0 ? "t=0 (Entrada Real)" : `t=${step} (Unroll)`}
+                {step === 0 ? "t=0 (Root Input)" : `t=${step} (Unroll)`}
               </button>
             ))}
           </div>
@@ -1573,13 +1635,13 @@ export function NetworkTopologyTab({
         <div style={{ background: "#0f172a", borderRadius: 6, padding: "8px 12px", borderLeft: unrollStep === 0 ? "3px solid #38bdf8" : "3px solid #f59e0b" }}>
           <div style={{ fontSize: 11, color: unrollStep === 0 ? "#93c5fd" : "#fcd34d", fontWeight: 600 }}>
             {unrollStep === 0
-              ? `⚡ PASO RAÍZ MCTS (t=0): Extracción de Estado Latente desde Observación Real (${inChannels}×${boardH}×${boardW})`
-              : `⚡ DESENROLLADO TEMPORAL RECURRENTE (t=${unrollStep}): Proyección e Imaginación en GPU sin Simulador (Horizonte máx=${maxUnroll})`}
+              ? `⚡ MCTS ROOT STEP (t=0): Extracting Latent State from Real Board Observation (${inChannels}×${boardH}×${boardW})`
+              : `⚡ RECURRENT IMAGINATION UNROLL (t=${unrollStep}): Latent Simulation on GPU without Physical Simulator (Horizon max=${maxUnroll})`}
           </div>
           <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
             {unrollStep === 0
-              ? `El tensor sensorial o_0 (${inChannels}×${boardH}×${boardW}) atraviesa h(o) produciendo s_0 (${hiddenDim}×${boardH}×${boardW}). Los cabezales evalúan el estado inicial.`
-              : `La Red de Dinámica g(s_${unrollStep - 1}, a_${unrollStep - 1}) proyecta s_${unrollStep} (${hiddenDim}×${boardH}×${boardW}) y recompensa inmediata. El cabezal de consistencia z(s) preserva la estabilidad semántica.`}
+              ? `The sensory tensor o_0 (${inChannels}×${boardH}×${boardW}) passes through h(o) to produce s_0 (${hiddenDim}×${boardH}×${boardW}). Multi-task FiLM layers condition evaluation per scenario.`
+              : `Dynamics network g(s_${unrollStep - 1}, a_${unrollStep - 1}) projects next state s_${unrollStep} (${hiddenDim}×${boardH}×${boardW}) and two-hot reward. Consistency projector z(s) maintains latent invariance.`}
           </div>
         </div>
       </div>
@@ -1601,11 +1663,51 @@ export function NetworkTopologyTab({
         >
           <div style={{ fontSize: 12, fontWeight: 700, color: "#cbd5e1", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span>🎨</span> Diagrama Gráfico Interactivo de Nodos
+              <span>🎨</span> Interactive Neural Network Topology &amp; Flow Diagram
             </span>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span className="muted" style={{ fontSize: 11 }}>Haz clic en cualquier nodo para ver detalles</span>
+              <span className="muted" style={{ fontSize: 11 }}>Click any node or pill to inspect architecture</span>
             </div>
+          </div>
+
+          {/* Quick Component Selection Pills */}
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            {[
+              { id: "observation", label: `Obs (${inChannels}ch)` },
+              { id: "representation", label: "Rep h_θ" },
+              { id: "task_conditioning", label: "Task FiLM (EZ-M)" },
+              { id: "latent", label: "Latent s_t" },
+              { id: "action", label: "Action a_t" },
+              { id: "dynamics", label: "Dynamics g_θ" },
+              { id: "manager_network", label: "Manager (H-EZ-M)" },
+              { id: "loss_balancer", label: "PCGrad Balancer" },
+              { id: "macro_planner", label: "Doctrine Profiler" },
+              { id: "policy", label: "Policy f_p" },
+              { id: "value", label: "Value (Two-Hot)" },
+              { id: "aux_objective", label: "Objective f_o" },
+              { id: "consistency", label: "Consistency q_θ" },
+              ...(hasThreatHead ? [{ id: "threat_map", label: "Threat Map" }] : []),
+              ...(hasAttritionHead ? [{ id: "attrition", label: "Attrition" }] : []),
+              ...(hasMoraleHead ? [{ id: "morale", label: "Morale" }] : []),
+            ].map((btn) => (
+              <button
+                key={btn.id}
+                onClick={() => setSelectedNodeId(btn.id)}
+                style={{
+                  background: selectedNodeId === btn.id ? "#0284c7" : "#1e293b",
+                  color: selectedNodeId === btn.id ? "#ffffff" : "#94a3b8",
+                  border: selectedNodeId === btn.id ? "1px solid #38bdf8" : "1px solid #334155",
+                  borderRadius: 4,
+                  padding: "2px 7px",
+                  fontSize: 10,
+                  fontWeight: selectedNodeId === btn.id ? 700 : 500,
+                  cursor: "pointer",
+                  transition: "all 0.1s ease",
+                }}
+              >
+                {btn.label}
+              </button>
+            ))}
           </div>
 
           {/* Graphical SVG Canvas */}
@@ -1624,7 +1726,7 @@ export function NetworkTopologyTab({
               style={{
                 width: "100%",
                 height: "auto",
-                maxHeight: diagramSize === "compact" ? Math.max(270, svgHeight + 20) : diagramSize === "expanded" ? Math.max(440, svgHeight + 120) : Math.max(340, svgHeight + 60),
+                maxHeight: diagramSize === "compact" ? Math.max(290, svgHeight + 20) : diagramSize === "expanded" ? Math.max(460, svgHeight + 120) : Math.max(360, svgHeight + 60),
                 display: "block",
               }}
             >
@@ -1653,17 +1755,25 @@ export function NetworkTopologyTab({
 
               {/* Connections (Paths with Arrows) */}
               {/* Obs -> Rep */}
-              <line x1="150" y1="60" x2="175" y2="60" stroke="#38bdf8" strokeWidth="2.5" markerEnd="url(#arrow)" strokeDasharray={unrollStep === 0 ? "none" : "4 4"} />
+              <line x1="150" y1="55" x2="175" y2="55" stroke="#38bdf8" strokeWidth="2.5" markerEnd="url(#arrow)" strokeDasharray={unrollStep === 0 ? "none" : "4 4"} />
               {/* Rep -> Latent */}
-              <line x1="335" y1="60" x2="360" y2="60" stroke="#38bdf8" strokeWidth="2.5" markerEnd="url(#arrow)" strokeDasharray={unrollStep === 0 ? "none" : "4 4"} />
+              <line x1="335" y1="55" x2="360" y2="55" stroke="#38bdf8" strokeWidth="2.5" markerEnd="url(#arrow)" strokeDasharray={unrollStep === 0 ? "none" : "4 4"} />
               
-              {/* Obs -> Macro Planner (Jerarquía Nivel 1) */}
-              <line x1="82" y1="105" x2="82" y2="140" stroke="#a855f7" strokeWidth="2" markerEnd="url(#arrow-purple)" strokeDasharray={unrollStep === 0 ? "none" : "3 3"} />
-              <text x="88" y="125" fill="#c084fc" fontSize="8" fontWeight="700">Jerarquía N1</text>
+              {/* Obs -> Manager Network (Level 1) */}
+              <line x1="82" y1="95" x2="82" y2="125" stroke="#a855f7" strokeWidth="2" markerEnd="url(#arrow-purple)" strokeDasharray={unrollStep === 0 ? "none" : "3 3"} />
+              <text x="88" y="112" fill="#c084fc" fontSize="8" fontWeight="700">H-EZ-M Level 1</text>
 
-              {/* Macro Planner -> MCTS Action Conditioning (Modulación de Priors) */}
-              <path d="M 82 230 C 82 254, 430 254, 430 225" fill="none" stroke="#a855f7" strokeWidth="2" strokeDasharray="3 3" markerEnd="url(#arrow-purple)" />
-              <text x="257" y="250" fill="#c084fc" fontSize="8" fontWeight="600" textAnchor="middle">Modulación Priors MCTS (Postura + Roles)</text>
+              {/* Manager Net -> Action / Priors */}
+              <path d="M 150 157 C 240 157, 300 157, 360 157" fill="none" stroke="#a855f7" strokeWidth="2" strokeDasharray="3 3" markerEnd="url(#arrow-purple)" />
+              <text x="257" y="148" fill="#c084fc" fontSize="8" fontWeight="600" textAnchor="middle">SpatialGoalFiLM Bridge (+35% π)</text>
+
+              {/* Task Conditioning -> Rep & Dynamics */}
+              <path d="M 257 235 L 257 198" fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="3 3" markerEnd="url(#arrow-amber)" />
+              <text x="265" y="215" fill="#fbbf24" fontSize="7.5" fontWeight="600">FiLM (1+γ)z+β</text>
+
+              {/* Loss Balancer -> Active Heads */}
+              <path d="M 150 255 C 330 255, 450 255, 530 255" fill="none" stroke="#10b981" strokeWidth="1.5" strokeDasharray="4 4" markerEnd="url(#arrow-green)" />
+              <text x="340" y="248" fill="#34d399" fontSize="7.5" fontWeight="600">PCGrad Orthogonal Surgery (g_i · g_j ≥ 0)</text>
 
               {/* Latent -> Active Heads Dynamic Connection Arrows */}
               {activeHeads.map((head, idx) => {
@@ -1683,10 +1793,10 @@ export function NetworkTopologyTab({
               })}
 
               {/* Recurrent Loop: Action -> Dynamics & Latent -> Dynamics */}
-              <line x1="365" y1="182" x2="340" y2="182" stroke={unrollStep > 0 ? "#f59e0b" : "#475569"} strokeWidth="2" markerEnd="url(#arrow-amber)" />
-              <path d="M 430 108 L 430 135 C 430 150, 410 165, 340 165" fill="none" stroke={unrollStep > 0 ? "#f59e0b" : "#475569"} strokeWidth="2" markerEnd="url(#arrow-amber)" strokeDasharray={unrollStep > 0 ? "none" : "3 3"} />
+              <line x1="365" y1="165" x2="340" y2="165" stroke={unrollStep > 0 ? "#f59e0b" : "#475569"} strokeWidth="2" markerEnd="url(#arrow-amber)" />
+              <path d="M 430 98 L 430 115 C 430 135, 410 145, 340 145" fill="none" stroke={unrollStep > 0 ? "#f59e0b" : "#475569"} strokeWidth="2" markerEnd="url(#arrow-amber)" strokeDasharray={unrollStep > 0 ? "none" : "3 3"} />
               {/* Dynamics Feedback: Dynamics -> Latent (s_{t+1}) */}
-              <path d="M 180 187 C 165 187, 165 85, 360 85" fill="none" stroke={unrollStep > 0 ? "#10b981" : "#334155"} strokeWidth="2.5" markerEnd="url(#arrow-green)" strokeDasharray={unrollStep > 0 ? "none" : "4 4"} />
+              <path d="M 180 160 C 165 160, 165 80, 360 80" fill="none" stroke={unrollStep > 0 ? "#10b981" : "#334155"} strokeWidth="2.5" markerEnd="url(#arrow-green)" strokeDasharray={unrollStep > 0 ? "none" : "4 4"} />
 
               {/* Node 1: Observation Tensor */}
               <g
@@ -1696,19 +1806,19 @@ export function NetworkTopologyTab({
               >
                 <rect
                   x="15"
-                  y="15"
+                  y="12"
                   width="135"
-                  height="90"
+                  height="82"
                   rx="8"
                   fill={selectedNodeId === "observation" ? "#0369a1" : "#0f172a"}
                   stroke={selectedNodeId === "observation" ? "#38bdf8" : "#0284c7"}
                   strokeWidth={selectedNodeId === "observation" ? "2.5" : "1.5"}
                   filter={unrollStep === 0 ? "url(#glow-cyan)" : "none"}
                 />
-                <text x="82" y="38" fill="#94a3b8" fontSize="9" fontWeight="700" textAnchor="middle">ENTRADA REAL</text>
-                <text x="82" y="58" fill="#f8fafc" fontSize="12" fontWeight="800" textAnchor="middle">Observación o_t</text>
-                <text x="82" y="76" fill="#38bdf8" fontSize="11" fontWeight="700" textAnchor="middle">{inChannels}×{boardH}×{boardW}</text>
-                <text x="82" y="92" fill="#64748b" fontSize="9" textAnchor="middle">Simulador VOEC</text>
+                <text x="82" y="32" fill="#94a3b8" fontSize="9" fontWeight="700" textAnchor="middle">SENSORY INPUT</text>
+                <text x="82" y="50" fill="#f8fafc" fontSize="12" fontWeight="800" textAnchor="middle">Observation o_t</text>
+                <text x="82" y="68" fill="#38bdf8" fontSize="11" fontWeight="700" textAnchor="middle">{inChannels}×{boardH}×{boardW}</text>
+                <text x="82" y="83" fill="#64748b" fontSize="8.5" textAnchor="middle">VOEC Simulator Feed</text>
               </g>
 
               {/* Node 2: Representation Network */}
@@ -1719,18 +1829,18 @@ export function NetworkTopologyTab({
               >
                 <rect
                   x="180"
-                  y="15"
+                  y="12"
                   width="155"
-                  height="90"
+                  height="82"
                   rx="8"
                   fill={selectedNodeId === "representation" ? "#0369a1" : "#1e293b"}
                   stroke={selectedNodeId === "representation" ? "#38bdf8" : "#0ea5e9"}
                   strokeWidth={selectedNodeId === "representation" ? "2.5" : "1.5"}
                 />
-                <text x="257" y="36" fill="#60a5fa" fontSize="9" fontWeight="700" textAnchor="middle">ENCODER {encoderType.toUpperCase()}</text>
-                <text x="257" y="56" fill="#ffffff" fontSize="12" fontWeight="800" textAnchor="middle">h_θ(o) Representación</text>
-                <text x="257" y="74" fill="#93c5fd" fontSize="10" textAnchor="middle">{dynamicsBlocks} ResBlocks ({hiddenDim}ch){isV2Optimized ? " + SE" : ""}</text>
-                <text x="257" y="90" fill="#64748b" fontSize="8.5" textAnchor="middle">{isV2Optimized ? "GroupNorm + MinMax Scale" : `Campo ~${1 + 2 * (1 + 2 * dynamicsBlocks)}×${1 + 2 * (1 + 2 * dynamicsBlocks)} hex`}</text>
+                <text x="257" y="32" fill="#60a5fa" fontSize="9" fontWeight="700" textAnchor="middle">ENCODER {encoderType.toUpperCase()}</text>
+                <text x="257" y="50" fill="#ffffff" fontSize="11.5" fontWeight="800" textAnchor="middle">h_θ(o) Representation</text>
+                <text x="257" y="67" fill="#93c5fd" fontSize="9.5" textAnchor="middle">{dynamicsBlocks} ResBlocks ({hiddenDim}ch){isV2Optimized ? " + SE" : ""}</text>
+                <text x="257" y="82" fill="#64748b" fontSize="8" textAnchor="middle">{isV2Optimized ? "GroupNorm + MinMax Scaling" : `Field ~${1 + 2 * (1 + 2 * dynamicsBlocks)}×${1 + 2 * (1 + 2 * dynamicsBlocks)} hex`}</text>
               </g>
 
               {/* Node 3: Latent State Manifold */}
@@ -1740,20 +1850,20 @@ export function NetworkTopologyTab({
               >
                 <rect
                   x="365"
-                  y="12"
+                  y="10"
                   width="130"
-                  height="96"
+                  height="86"
                   rx="10"
                   fill={selectedNodeId === "latent" ? "#065f46" : "#064e3b"}
                   stroke="#10b981"
                   strokeWidth="2.5"
                   filter="url(#glow-green)"
                 />
-                <text x="430" y="34" fill="#6ee7b7" fontSize="9" fontWeight="700" textAnchor="middle">ESTADO LATENTE</text>
-                <text x="430" y="56" fill="#ffffff" fontSize="15" fontWeight="800" textAnchor="middle">s_{unrollStep}</text>
-                <text x="430" y="76" fill="#a7f3d0" fontSize="11" fontWeight="700" textAnchor="middle">{hiddenDim}×{boardH}×{boardW}</text>
-                <text x="430" y="94" fill="#34d399" fontSize="9" textAnchor="middle">
-                  {unrollStep === 0 ? "h(o) Raíz" : `g(s,a) Paso ${unrollStep}`}
+                <text x="430" y="30" fill="#6ee7b7" fontSize="9" fontWeight="700" textAnchor="middle">LATENT MANIFOLD</text>
+                <text x="430" y="50" fill="#ffffff" fontSize="15" fontWeight="800" textAnchor="middle">s_{unrollStep}</text>
+                <text x="430" y="68" fill="#a7f3d0" fontSize="11" fontWeight="700" textAnchor="middle">{hiddenDim}×{boardH}×{boardW}</text>
+                <text x="430" y="84" fill="#34d399" fontSize="8.5" textAnchor="middle">
+                  {unrollStep === 0 ? "h(o) Root" : `g(s,a) Step ${unrollStep}`}
                 </text>
               </g>
 
@@ -1764,17 +1874,17 @@ export function NetworkTopologyTab({
               >
                 <rect
                   x="365"
-                  y="145"
+                  y="125"
                   width="130"
-                  height="75"
+                  height="72"
                   rx="8"
                   fill={selectedNodeId === "action" ? "#78350f" : "#1e293b"}
                   stroke="#f59e0b"
                   strokeWidth={selectedNodeId === "action" ? "2.5" : "1.5"}
                 />
-                <text x="430" y="168" fill="#fbbf24" fontSize="9" fontWeight="700" textAnchor="middle">ACCIÓN MCTS</text>
-                <text x="430" y="188" fill="#f8fafc" fontSize="11" fontWeight="700" textAnchor="middle">a_{unrollStep} (0..{actionDim - 1})</text>
-                <text x="430" y="205" fill="#94a3b8" fontSize="8.5" textAnchor="middle">1×{boardH}×{boardW} broadcast</text>
+                <text x="430" y="145" fill="#fbbf24" fontSize="9" fontWeight="700" textAnchor="middle">MCTS ACTION</text>
+                <text x="430" y="165" fill="#f8fafc" fontSize="11" fontWeight="700" textAnchor="middle">a_{unrollStep} (0..{actionDim - 1})</text>
+                <text x="430" y="182" fill="#94a3b8" fontSize="8" textAnchor="middle">1×{boardH}×{boardW} broadcast</text>
               </g>
 
               {/* Node 5: Dynamics Recurrent Network */}
@@ -1784,39 +1894,77 @@ export function NetworkTopologyTab({
               >
                 <rect
                   x="180"
-                  y="145"
+                  y="125"
                   width="155"
-                  height="85"
+                  height="72"
                   rx="8"
                   fill={selectedNodeId === "dynamics" ? "#7c2d12" : "#1e293b"}
                   stroke={unrollStep > 0 ? "#f97316" : "#475569"}
                   strokeWidth="2"
                 />
-                <text x="257" y="168" fill="#fbbf24" fontSize="9" fontWeight="700" textAnchor="middle">RED DE DINÁMICA</text>
-                <text x="257" y="186" fill="#ffffff" fontSize="11" fontWeight="800" textAnchor="middle">g_θ(s, a) ➔ s_{Math.min(unrollStep + 1, maxUnroll)}</text>
-                <text x="257" y="204" fill="#fdba74" fontSize="9" textAnchor="middle">{dynamicsBlocks} ResBlocks {isV2Optimized ? "+ SE + Bottleneck" : "+ Reward Head"}</text>
-                <text x="257" y="219" fill="#94a3b8" fontSize="8.5" textAnchor="middle">{isV2Optimized ? `Unroll ${maxUnroll} pasos (MinMax Scaling)` : `Unroll máx = ${maxUnroll} pasos`}</text>
+                <text x="257" y="145" fill="#fbbf24" fontSize="9" fontWeight="700" textAnchor="middle">RECURRENT DYNAMICS</text>
+                <text x="257" y="163" fill="#ffffff" fontSize="10.5" fontWeight="800" textAnchor="middle">g_θ(s, a) ➔ s_{Math.min(unrollStep + 1, maxUnroll)}</text>
+                <text x="257" y="179" fill="#fdba74" fontSize="8.5" textAnchor="middle">{dynamicsBlocks} ResBlocks {isV2Optimized ? "+ SE + Two-Hot" : "+ Reward"}</text>
               </g>
 
-              {/* Node 6: Hierarchical Strategic Macro Planner (Level 1) */}
+              {/* Node 6: Strategic Manager Network (H-EZ-M Level 1) */}
               <g
-                onClick={() => setSelectedNodeId("macro_planner")}
+                onClick={() => setSelectedNodeId("manager_network")}
                 style={{ cursor: "pointer" }}
               >
                 <rect
                   x="15"
-                  y="145"
+                  y="125"
                   width="135"
-                  height="85"
+                  height="72"
                   rx="8"
-                  fill={selectedNodeId === "macro_planner" ? "#581c87" : "#1e1b4b"}
-                  stroke={selectedNodeId === "macro_planner" ? "#d8b4fe" : "#a855f7"}
-                  strokeWidth={selectedNodeId === "macro_planner" ? "2.5" : "1.5"}
+                  fill={selectedNodeId === "manager_network" ? "#581c87" : "#1e1b4b"}
+                  stroke={selectedNodeId === "manager_network" ? "#d8b4fe" : "#a855f7"}
+                  strokeWidth={selectedNodeId === "manager_network" ? "2.5" : "1.5"}
                 />
-                <text x="82" y="166" fill="#c084fc" fontSize="9" fontWeight="700" textAnchor="middle">NIVEL 1 • DOCTRINA</text>
-                <text x="82" y="184" fill="#ffffff" fontSize="11" fontWeight="800" textAnchor="middle">Planificador Macro</text>
-                <text x="82" y="200" fill="#e9d5ff" fontSize="9" textAnchor="middle">8 Roles • Mutaciones</text>
-                <text x="82" y="215" fill="#38bdf8" fontSize="8.5" fontWeight="600" textAnchor="middle">⚡ Priors MCTS (+35% π)</text>
+                <text x="82" y="145" fill="#c084fc" fontSize="8.5" fontWeight="700" textAnchor="middle">LEVEL 1 • STRATEGIC</text>
+                <text x="82" y="163" fill="#ffffff" fontSize="10.5" fontWeight="800" textAnchor="middle">Manager Network</text>
+                <text x="82" y="179" fill="#e9d5ff" fontSize="8" textAnchor="middle">Macro Goal g_T (16×16 Heatmap)</text>
+              </g>
+
+              {/* Node 7: Task Conditioning & FiLM (EZ-M) */}
+              <g
+                onClick={() => setSelectedNodeId("task_conditioning")}
+                style={{ cursor: "pointer" }}
+              >
+                <rect
+                  x="180"
+                  y="225"
+                  width="155"
+                  height="75"
+                  rx="8"
+                  fill={selectedNodeId === "task_conditioning" ? "#78350f" : "#1c1917"}
+                  stroke={selectedNodeId === "task_conditioning" ? "#fcd34d" : "#d97706"}
+                  strokeWidth={selectedNodeId === "task_conditioning" ? "2.5" : "1.5"}
+                />
+                <text x="257" y="244" fill="#fbbf24" fontSize="8.5" fontWeight="700" textAnchor="middle">EZ-M MULTI-TASK</text>
+                <text x="257" y="262" fill="#ffffff" fontSize="10.5" fontWeight="800" textAnchor="middle">Task FiLM Layer</text>
+                <text x="257" y="278" fill="#fde68a" fontSize="8" textAnchor="middle">e_τ ({taskEmbedDim}d) ➔ (1+γ)z+β Zero-Init</text>
+              </g>
+
+              {/* Node 8: Loss Balancer & Multi-Task PCGrad */}
+              <g
+                onClick={() => setSelectedNodeId("loss_balancer")}
+                style={{ cursor: "pointer" }}
+              >
+                <rect
+                  x="15"
+                  y="225"
+                  width="135"
+                  height="75"
+                  rx="8"
+                  fill={selectedNodeId === "loss_balancer" ? "#064e3b" : "#022c22"}
+                  stroke={selectedNodeId === "loss_balancer" ? "#6ee7b7" : "#059669"}
+                  strokeWidth={selectedNodeId === "loss_balancer" ? "2.5" : "1.5"}
+                />
+                <text x="82" y="244" fill="#34d399" fontSize="8.5" fontWeight="700" textAnchor="middle">GRADIENT SURGERY</text>
+                <text x="82" y="262" fill="#ffffff" fontSize="10.5" fontWeight="800" textAnchor="middle">PCGrad Balancer</text>
+                <text x="82" y="278" fill="#a7f3d0" fontSize="8" textAnchor="middle">Orthogonal Projection (g_i·g_j ≥ 0)</text>
               </g>
 
               {/* Dynamic Active Prediction Heads */}
@@ -1854,7 +2002,7 @@ export function NetworkTopologyTab({
           </div>
 
           <div className="muted" style={{ fontSize: 11, textAlign: "center" }}>
-            Arquitectura desenrollada en tiempo de ejecución para <b>{runId}</b>. Cada componente recalcula formas y pesos dinámicamente.
+            Runtime unrolled architecture for <b>{runId}</b>. All components recalculate tensor shapes, receptive fields, and parameter counts dynamically.
           </div>
         </div>
 
@@ -1877,43 +2025,43 @@ export function NetworkTopologyTab({
             <div style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid #10b981", borderRadius: 6, padding: "8px 10px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: "#34d399", display: "flex", alignItems: "center", gap: 4 }}>
-                  <span>🔬</span> Diagnóstico en Vivo del Cabezal: {selectedNode.name}
+                  <span>🔬</span> Live Head Diagnostics: {selectedNode.name}
                 </span>
                 <span style={{ fontSize: 9, background: "#064e3b", color: "#6ee7b7", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                  SALUDABLE
+                  HEALTHY
                 </span>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11 }}>
                 {selectedNodeId === "policy" && (
                   <>
-                    <div><span className="muted">Loss Política:</span> <b style={{ color: "#38bdf8" }}>{fmtNum(polLoss, 4)}</b></div>
-                    <div><span className="muted">Entropía:</span> <b style={{ color: "#f8fafc" }}>{fmtNum(polEntropy, 3)}</b></div>
-                    <div><span className="muted">Confianza Previa:</span> <b style={{ color: "#34d399" }}>{fmtPercent(polConfidence)}</b></div>
-                    <div><span className="muted">Margen Decisión:</span> <b style={{ color: "#fbbf24" }}>{fmtNum(polMargin, 3)}</b></div>
+                    <div><span className="muted">Policy Loss:</span> <b style={{ color: "#38bdf8" }}>{fmtNum(polLoss, 4)}</b></div>
+                    <div><span className="muted">Entropy:</span> <b style={{ color: "#f8fafc" }}>{fmtNum(polEntropy, 3)}</b></div>
+                    <div><span className="muted">Prior Confidence:</span> <b style={{ color: "#34d399" }}>{fmtPercent(polConfidence)}</b></div>
+                    <div><span className="muted">Decision Margin:</span> <b style={{ color: "#fbbf24" }}>{fmtNum(polMargin, 3)}</b></div>
                   </>
                 )}
                 {selectedNodeId === "value" && (
                   <>
-                    <div><span className="muted">Loss Valor:</span> <b style={{ color: "#22c55e" }}>{fmtNum(valLoss, 4)}</b></div>
-                    <div><span className="muted">Varianza Explicada:</span> <b style={{ color: "#34d399" }}>{fmtNum(valExpVar, 3)}</b></div>
-                    <div><span className="muted">Saturación Q MCTS:</span> <b style={{ color: qSatRate !== null && qSatRate < 0.05 ? "#34d399" : "#f59e0b" }}>{fmtPercent(qSatRate)}</b></div>
-                    <div><span className="muted">Proxy Retorno:</span> <b style={{ color: "#38bdf8" }}>{fmtNum(valWinRate, 3)}</b></div>
+                    <div><span className="muted">Value Loss:</span> <b style={{ color: "#22c55e" }}>{fmtNum(valLoss, 4)}</b></div>
+                    <div><span className="muted">Explained Variance:</span> <b style={{ color: "#34d399" }}>{fmtNum(valExpVar, 3)}</b></div>
+                    <div><span className="muted">MCTS Q-Sat:</span> <b style={{ color: qSatRate !== null && qSatRate < 0.05 ? "#34d399" : "#f59e0b" }}>{fmtPercent(qSatRate)}</b></div>
+                    <div><span className="muted">Return Proxy:</span> <b style={{ color: "#38bdf8" }}>{fmtNum(valWinRate, 3)}</b></div>
                   </>
                 )}
                 {selectedNodeId === "aux_objective" && (
                   <>
-                    <div><span className="muted">Loss Objetivo:</span> <b style={{ color: "#f43f5e" }}>{fmtNum(objLoss, 4)}</b></div>
-                    <div><span className="muted">Captura Oportunidad:</span> <b style={{ color: "#34d399" }}>{fmtPercent(objTakeRate)}</b></div>
-                    <div><span className="muted">Eficiencia Conversión:</span> <b style={{ color: "#38bdf8" }}>{fmtNum(objConversionEff, 4)}</b></div>
-                    <div><span className="muted">VPs Capturados Avg:</span> <b style={{ color: "#fbbf24" }}>{fmtNum(objCapturedAvg, 2, " VP")}</b></div>
+                    <div><span className="muted">Objective Loss:</span> <b style={{ color: "#f43f5e" }}>{fmtNum(objLoss, 4)}</b></div>
+                    <div><span className="muted">Opportunity Take:</span> <b style={{ color: "#34d399" }}>{fmtPercent(objTakeRate)}</b></div>
+                    <div><span className="muted">Conversion Efficiency:</span> <b style={{ color: "#38bdf8" }}>{fmtNum(objConversionEff, 4)}</b></div>
+                    <div><span className="muted">Captured VPs Avg:</span> <b style={{ color: "#fbbf24" }}>{fmtNum(objCapturedAvg, 2, " VP")}</b></div>
                   </>
                 )}
                 {selectedNodeId === "consistency" && (
                   <>
-                    <div><span className="muted">Loss Consistencia:</span> <b style={{ color: "#c084fc" }}>{fmtSci(conLoss)}</b></div>
-                    <div><span className="muted">Cobertura Reanálisis:</span> <b style={{ color: "#34d399" }}>{fmtPercent(conReanalysisCov, 0)}</b></div>
-                    <div><span className="muted">Pares Consistencia:</span> <b style={{ color: "#38bdf8" }}>{conPairs !== null ? conPairs.toLocaleString() : "—"}</b></div>
-                    <div><span className="muted">Deriva Espacial:</span> <b style={{ color: "#34d399" }}>{conLoss !== null ? "Invariante" : "—"}</b></div>
+                    <div><span className="muted">Consistency Loss:</span> <b style={{ color: "#c084fc" }}>{fmtSci(conLoss)}</b></div>
+                    <div><span className="muted">Reanalysis Coverage:</span> <b style={{ color: "#34d399" }}>{fmtPercent(conReanalysisCov, 0)}</b></div>
+                    <div><span className="muted">Consistency Pairs:</span> <b style={{ color: "#38bdf8" }}>{conPairs !== null ? conPairs.toLocaleString() : "—"}</b></div>
+                    <div><span className="muted">Spatial Invariance:</span> <b style={{ color: "#34d399" }}>{conLoss !== null ? "Invariant" : "—"}</b></div>
                   </>
                 )}
                 {selectedNodeId === "threat_map" && hasThreatHead && (
@@ -1963,24 +2111,46 @@ export function NetworkTopologyTab({
             </div>
           )}
 
-          {/* Dedicated Macro Planner Diagnostics & Quick Actions Banner */}
-          {selectedNodeId === "macro_planner" && (
-            <div style={{ background: "rgba(168, 85, 247, 0.1)", border: "1px solid #a855f7", borderRadius: 6, padding: "8px 10px" }}>
+          {/* Dedicated Task Conditioning (EZ-M) Diagnostics Banner */}
+          {selectedNodeId === "task_conditioning" && (
+            <div style={{ background: "rgba(217, 119, 6, 0.1)", border: "1px solid #d97706", borderRadius: 6, padding: "8px 10px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: "#d8b4fe", display: "flex", alignItems: "center", gap: 4 }}>
-                  <span>♟️</span> Estado Doctrinal Macro (Jerarquía 3 Capas v2.4.5)
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#fbbf24", display: "flex", alignItems: "center", gap: 4 }}>
+                  <span>🧩</span> Multi-Task Conditioning (EZ-M) Status
                 </span>
-                <span style={{ fontSize: 9, background: "#581c87", color: "#e9d5ff", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                  8 ROLES CANÓNICOS
+                <span style={{ fontSize: 9, background: "#78350f", color: "#fef3c7", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                  FiLM ACTIVE
                 </span>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11 }}>
-                <div><span className="muted">Postura Dominante:</span> <b style={{ color: "#c084fc" }}>{macroStats.hasRealData ? (macroStats.assaultPct >= 50 ? "ASSAULT_VP" : "DEFENSIVE_HOLD") : "N/A"}</b></div>
-                <div><span className="muted">Asalto VP:</span> <b style={{ color: "#38bdf8" }}>{macroStats.hasRealData ? `${macroStats.assaultPct.toFixed(1)}%` : "N/A"}</b></div>
-                <div><span className="muted">Punta de Lanza:</span> <b style={{ color: "#fbbf24" }}>{macroStats.hasRealData ? `${macroStats.spearheadPct.toFixed(1)}%` : "N/A"}</b></div>
-                <div><span className="muted">Apoyo de Fuego:</span> <b style={{ color: "#fb923c" }}>{macroStats.hasRealData ? `${macroStats.fireSupportPct.toFixed(1)}%` : "N/A"}</b></div>
-                <div><span className="muted">Mutaciones Context.:</span> <b style={{ color: "#f43f5e" }}>{macroStats.hasRealData ? `${macroStats.mutatedPct.toFixed(1)}%` : "N/A"}</b></div>
-                <div><span className="muted">Sobreescritura MCTS:</span> <b style={{ color: "#f59e0b" }}>{macroStats.hasRealData ? `${macroStats.mctsOverridePct.toFixed(1)}%` : "N/A"}</b></div>
+                <div><span className="muted">Multi-Task Mode:</span> <b style={{ color: "#34d399" }}>{enableMultitask ? "Enabled" : "Single-Task"}</b></div>
+                <div><span className="muted">Total Tasks:</span> <b style={{ color: "#38bdf8" }}>{numTasks} scenarios</b></div>
+                <div><span className="muted">Embedding Dim:</span> <b style={{ color: "#fbbf24" }}>{taskEmbedDim} dims</b></div>
+                <div><span className="muted">FiLM Modulation:</span> <b style={{ color: "#34d399" }}>Zero-Init Identity</b></div>
+                <div><span className="muted">Replay Stratification:</span> <b style={{ color: "#c084fc" }}>Uniform Multi-Queue</b></div>
+                <div><span className="muted">Negative Transfer:</span> <b style={{ color: "#34d399" }}>Mitigated (PCGrad)</b></div>
+              </div>
+            </div>
+          )}
+
+          {/* Dedicated Manager Network (H-EZ-M Level 1) Diagnostics Banner */}
+          {selectedNodeId === "manager_network" && (
+            <div style={{ background: "rgba(168, 85, 247, 0.1)", border: "1px solid #a855f7", borderRadius: 6, padding: "8px 10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#d8b4fe", display: "flex", alignItems: "center", gap: 4 }}>
+                  <span>🎖️</span> Strategic Manager Network (H-EZ-M v3.0)
+                </span>
+                <span style={{ fontSize: 9, background: "#581c87", color: "#e9d5ff", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                  LEVEL 1 COMMANDER
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11 }}>
+                <div><span className="muted">Macro Cycle Horizon:</span> <b style={{ color: "#c084fc" }}>T ≤ 8 turns</b></div>
+                <div><span className="muted">Tactical Modes:</span> <b style={{ color: "#38bdf8" }}>{numGoalModes} Modes (Assault, Hold...)</b></div>
+                <div><span className="muted">Spatial Goal Map:</span> <b style={{ color: "#fbbf24" }}>16×16 Heatmap</b></div>
+                <div><span className="muted">Topography IPB:</span> <b style={{ color: "#34d399" }}>5D Context Tensor</b></div>
+                <div><span className="muted">Worker Modulation:</span> <b style={{ color: "#a855f7" }}>SpatialGoalFiLM Bridge</b></div>
+                <div><span className="muted">Prior Shaping:</span> <b style={{ color: "#34d399" }}>+35% π Root Boost</b></div>
               </div>
               <button
                 onClick={() => setSubTab("macro-planner")}
@@ -2001,13 +2171,78 @@ export function NetworkTopologyTab({
                   gap: 6,
                 }}
               >
-                <span>♟️</span> Abrir Panel de Planificador Macro &amp; Doctrina ➔
+                <span>♟️</span> Open Strategic Macro Planner &amp; Doctrine View ➔
+              </button>
+            </div>
+          )}
+
+          {/* Dedicated Loss Balancer & PCGrad Diagnostics Banner */}
+          {selectedNodeId === "loss_balancer" && (
+            <div style={{ background: "rgba(5, 150, 105, 0.1)", border: "1px solid #059669", borderRadius: 6, padding: "8px 10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#34d399", display: "flex", alignItems: "center", gap: 4 }}>
+                  <span>⚖️</span> Adaptive Loss Balancer &amp; PCGrad Surgery
+                </span>
+                <span style={{ fontSize: 9, background: "#064e3b", color: "#a7f3d0", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                  GRADIENT SURGERY
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11 }}>
+                <div><span className="muted">Conflict Resolution:</span> <b style={{ color: "#34d399" }}>PCGrad (Orthogonal Projection)</b></div>
+                <div><span className="muted">Cosine Telemetry:</span> <b style={{ color: "#38bdf8" }}>CosSim(i, j) Tracked</b></div>
+                <div><span className="muted">Value / Reward Target:</span> <b style={{ color: "#fbbf24" }}>Two-Hot (601 bins)</b></div>
+                <div><span className="muted">Reanalysis Target:</span> <b style={{ color: "#34d399" }}>Fast Vectorized Slice</b></div>
+                <div><span className="muted">GradNorm Balancing:</span> <b style={{ color: "#a855f7" }}>Dynamic Weights</b></div>
+                <div><span className="muted">Pareto Guarantee:</span> <b style={{ color: "#34d399" }}>Zero Destructive Drift</b></div>
+              </div>
+            </div>
+          )}
+
+          {/* Dedicated Macro Planner Diagnostics & Quick Actions Banner */}
+          {selectedNodeId === "macro_planner" && (
+            <div style={{ background: "rgba(168, 85, 247, 0.1)", border: "1px solid #a855f7", borderRadius: 6, padding: "8px 10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#d8b4fe", display: "flex", alignItems: "center", gap: 4 }}>
+                  <span>♟️</span> Macro Doctrinal Status (H-EZ-M 4-Tier Hierarchy)
+                </span>
+                <span style={{ fontSize: 9, background: "#581c87", color: "#e9d5ff", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                  8 CANONICAL ROLES
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11 }}>
+                <div><span className="muted">Dominant Posture:</span> <b style={{ color: "#c084fc" }}>{macroStats.hasRealData ? (macroStats.assaultPct >= 50 ? "ASSAULT_VP" : "DEFENSIVE_HOLD") : "N/A"}</b></div>
+                <div><span className="muted">VP Assault:</span> <b style={{ color: "#38bdf8" }}>{macroStats.hasRealData ? `${macroStats.assaultPct.toFixed(1)}%` : "N/A"}</b></div>
+                <div><span className="muted">Spearhead:</span> <b style={{ color: "#fbbf24" }}>{macroStats.hasRealData ? `${macroStats.spearheadPct.toFixed(1)}%` : "N/A"}</b></div>
+                <div><span className="muted">Fire Support:</span> <b style={{ color: "#fb923c" }}>{macroStats.hasRealData ? `${macroStats.fireSupportPct.toFixed(1)}%` : "N/A"}</b></div>
+                <div><span className="muted">Context Mutations:</span> <b style={{ color: "#f43f5e" }}>{macroStats.hasRealData ? `${macroStats.mutatedPct.toFixed(1)}%` : "N/A"}</b></div>
+                <div><span className="muted">MCTS Overrides:</span> <b style={{ color: "#f59e0b" }}>{macroStats.hasRealData ? `${macroStats.mctsOverridePct.toFixed(1)}%` : "N/A"}</b></div>
+              </div>
+              <button
+                onClick={() => setSubTab("macro-planner")}
+                style={{
+                  width: "100%",
+                  marginTop: 8,
+                  background: "#7e22ce",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: 4,
+                  padding: "5px 8px",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                }}
+              >
+                <span>♟️</span> Open Macro Planner &amp; Doctrine View ➔
               </button>
             </div>
           )}
           <div>
             <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700, textTransform: "uppercase" }}>
-              Inspector de Componente
+              Component Inspector
             </div>
             <h3 style={{ margin: "2px 0 0 0", fontSize: 16, color: "#38bdf8" }}>
               {selectedNode.name}
@@ -2023,25 +2258,25 @@ export function NetworkTopologyTab({
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             <div style={{ background: "#0f172a", padding: 8, borderRadius: 6 }}>
-              <div className="muted" style={{ fontSize: 10 }}>Forma Entrada</div>
+              <div className="muted" style={{ fontSize: 10 }}>Input Shape</div>
               <div style={{ fontSize: 11, fontWeight: 700, color: "#f8fafc", marginTop: 2 }}>
                 {selectedNode.inShape}
               </div>
             </div>
             <div style={{ background: "#0f172a", padding: 8, borderRadius: 6 }}>
-              <div className="muted" style={{ fontSize: 10 }}>Forma Salida</div>
+              <div className="muted" style={{ fontSize: 10 }}>Output Shape</div>
               <div style={{ fontSize: 11, fontWeight: 700, color: "#34d399", marginTop: 2 }}>
                 {selectedNode.outShape}
               </div>
             </div>
             <div style={{ background: "#0f172a", padding: 8, borderRadius: 6 }}>
-              <div className="muted" style={{ fontSize: 10 }}>Campo Receptivo</div>
+              <div className="muted" style={{ fontSize: 10 }}>Receptive Field</div>
               <div style={{ fontSize: 11, fontWeight: 700, color: "#fbbf24", marginTop: 2 }}>
                 {selectedNode.receptiveField}
               </div>
             </div>
             <div style={{ background: "#0f172a", padding: 8, borderRadius: 6 }}>
-              <div className="muted" style={{ fontSize: 10 }}>Parámetros</div>
+              <div className="muted" style={{ fontSize: 10 }}>Parameters</div>
               <div style={{ fontSize: 11, fontWeight: 700, color: "#c084fc", marginTop: 2 }}>
                 {selectedNode.paramEstimate}
               </div>
@@ -2050,7 +2285,7 @@ export function NetworkTopologyTab({
 
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 6 }}>
-              Arquitectura Interna de Capas:
+              Internal Layer Architecture:
             </div>
             <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11, color: "#e2e8f0", display: "flex", flexDirection: "column", gap: 4 }}>
               {selectedNode.architecture.map((layer, idx) => (
@@ -2061,7 +2296,7 @@ export function NetworkTopologyTab({
 
           <div style={{ background: "rgba(14, 165, 233, 0.08)", border: "1px solid #0284c7", borderRadius: 6, padding: 8 }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: "#38bdf8", marginBottom: 2 }}>
-              Detalle Funcional MLOps (Ejecución {runId})
+              MLOps Functional Details (Run {runId})
             </div>
             <div style={{ fontSize: 11, color: "#e2e8f0" }}>
               {selectedNode.details}
@@ -2082,21 +2317,21 @@ export function NetworkTopologyTab({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
           <div>
             <h4 style={{ margin: 0, fontSize: 14, color: "#38bdf8", display: "flex", alignItems: "center", gap: 6 }}>
-              <span>📡</span> Catálogo de los {inChannels} Canales Espaciales de Entrada (Tensor {inChannels}×{boardH}×{boardW})
+              <span>📡</span> Catalog of {inChannels} Spatial Input Channels (Tensor {inChannels}×{boardH}×{boardW})
             </h4>
             <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-              Codificación espacial hexágono a hexágono del estado táctico del simulador VOEC para <b>{runId}</b>.
+              Hex-by-hex spatial encoding of the VOEC tactical simulation state for <b>{runId}</b>.
             </div>
           </div>
 
           <div style={{ display: "flex", gap: 4, background: "#0f172a", padding: 3, borderRadius: 6, flexWrap: "wrap" }}>
             {[
-              { id: "all", label: `Todos (${dynamicChannelsList.length})` },
-              { id: "units", label: "Tropas" },
-              { id: "terrain", label: "Terreno/LOS" },
+              { id: "all", label: `All (${dynamicChannelsList.length})` },
+              { id: "units", label: "Units" },
+              { id: "terrain", label: "Terrain/LOS" },
               { id: "vp", label: "VPs" },
-              { id: "hex", label: "Topología Hex" },
-              { id: "global", label: "Globales" },
+              { id: "hex", label: "Hex Topology" },
+              { id: "global", label: "Globals" },
             ].map((f) => (
               <button
                 key={f.id}
@@ -2171,7 +2406,7 @@ export function NetworkTopologyTab({
                 return (
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4, paddingTop: 4, borderTop: "1px dashed #334155", fontSize: 10 }}>
                     <span style={{ fontWeight: 700, color: isHigh ? "#34d399" : isMod ? "#38bdf8" : isLow ? "#fbbf24" : "#f43f5e" }}>
-                      #{sc.rank} ({isHigh ? "Alta" : isMod ? "Media" : isLow ? "Baja" : "Inactiva"})
+                      #{sc.rank} ({isHigh ? "High" : isMod ? "Moderate" : isLow ? "Low" : "Inactive"})
                     </span>
                     <span style={{ color: "#cbd5e1", fontFamily: "monospace" }}>
                       Score: {Number(sc.importance_score).toFixed(3)}
@@ -2186,7 +2421,7 @@ export function NetworkTopologyTab({
       </>
       )}
 
-{/* SECTION 3: CHANNEL EFFECTIVENESS & ATTRIBUTION ANALYZER */}
+      {/* SECTION 3: CHANNEL EFFECTIVENESS & ATTRIBUTION ANALYZER */}
       {currentSubTab === "channel-attribution" && (
         <div
           style={{
@@ -2202,10 +2437,10 @@ export function NetworkTopologyTab({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <div>
             <h4 style={{ margin: 0, fontSize: 14, color: "#38bdf8", display: "flex", alignItems: "center", gap: 6 }}>
-              <span>⚡</span> Análisis de Efectividad & Atribución de Canales (Ablación & Saliency)
+              <span>⚡</span> Channel Effectiveness &amp; Saliency Attribution Analyzer (Ablation &amp; Saliency)
             </h4>
             <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-              Diagnóstico empírico: Saliencia de gradientes (∇v, ∇π) y perturbación por oclusión cero (|Δv|, D_KL) en el simulador táctico VOEC.
+              Empirical diagnostics: Gradient saliency (∇v, ∇π) and zero-occlusion perturbation (|Δv|, D_KL) in VOEC tactical simulator.
             </div>
           </div>
 
@@ -2231,10 +2466,10 @@ export function NetworkTopologyTab({
               <span>{analyzing ? "⏳" : attributionReport ? "🔄" : "⚡"}</span>
               <span>
                 {analyzing
-                  ? "Ejecutando Análisis (CPU/GPU)..."
+                  ? "Running Analysis (CPU/GPU)..."
                   : attributionReport
-                  ? "Re-ejecutar Análisis de Canales"
-                  : "Ejecutar Análisis de Efectividad"}
+                  ? "Re-run Channel Analysis"
+                  : "Run Effectiveness Analysis"}
               </span>
             </button>
           </div>
@@ -2244,10 +2479,10 @@ export function NetworkTopologyTab({
         {analyzing && (
           <div style={{ background: "rgba(2, 132, 199, 0.15)", border: "1px solid #0284c7", borderRadius: 6, padding: "12px 16px" }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "#38bdf8", display: "flex", alignItems: "center", gap: 6 }}>
-              <span>⏳</span> Análisis en ejecución para <code>{runId}</code>...
+              <span>⏳</span> Analysis running for <code>{runId}</code>...
             </div>
             <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-              Cargando checkpoint de red, recolectando trayectorias con el simulador VOEC, calculando saliencia de gradientes ∇v y ∇π, y evaluando el cambio de valor (|Δv|) y divergencia de política (D_KL) canal a canal. Esta operación puede tardar entre 10 y 20 segundos.
+              Loading network checkpoint, sampling rollouts with VOEC simulator, computing gradient saliency ∇v and ∇π, and evaluating value shift (|Δv|) and policy divergence (D_KL) channel by channel. This operation may take 10 to 20 seconds.
             </div>
           </div>
         )}
@@ -2255,7 +2490,7 @@ export function NetworkTopologyTab({
         {/* Error Banner */}
         {analysisError && (
           <div style={{ background: "rgba(239, 68, 68, 0.15)", border: "1px solid #ef4444", borderRadius: 6, padding: "10px 14px", color: "#fca5a5", fontSize: 11 }}>
-            <b>Error al ejecutar análisis:</b> {analysisError}
+            <b>Error running analysis:</b> {analysisError}
           </div>
         )}
 
@@ -2265,15 +2500,15 @@ export function NetworkTopologyTab({
             {/* KPI Cards */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
               <div style={{ background: "#0f172a", borderRadius: 6, padding: "8px 12px", border: "1px solid #334155" }}>
-                <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Muestras Analizadas</div>
+                <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Analyzed Samples</div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: "#38bdf8", marginTop: 2 }}>
-                  {Number(attributionReport.num_observations_analyzed ?? 0)} observaciones
+                  {Number(attributionReport.num_observations_analyzed ?? 0)} observations
                 </div>
-                <div className="muted" style={{ fontSize: 10 }}>4 semillas VOEC × 15 pasos</div>
+                <div className="muted" style={{ fontSize: 10 }}>4 VOEC seeds × 15 steps</div>
               </div>
 
               <div style={{ background: "#0f172a", borderRadius: 6, padding: "8px 12px", border: "1px solid #334155" }}>
-                <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Canal #1 Más Crítico</div>
+                <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>#1 Most Critical Channel</div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#34d399", marginTop: 2 }}>
                   {topChannel ? `#${topChannel.index} ${topChannel.name}` : "N/A"}
                 </div>
@@ -2283,7 +2518,7 @@ export function NetworkTopologyTab({
               </div>
 
               <div style={{ background: "#0f172a", borderRadius: 6, padding: "8px 12px", border: "1px solid #334155" }}>
-                <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Canales Tácticos Clave</div>
+                <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Key Tactical Channels</div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#38bdf8", marginTop: 2 }}>
                   Ch 21 (Frontline): #{ch21Info?.rank ?? "-"} (Score {ch21Info ? Number(ch21Info.importance_score).toFixed(3) : "-"})
                 </div>
@@ -2293,21 +2528,21 @@ export function NetworkTopologyTab({
               </div>
 
               <div style={{ background: "#0f172a", borderRadius: 6, padding: "8px 12px", border: "1px solid #334155" }}>
-                <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Distribución Efectividad</div>
+                <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Effectiveness Distribution</div>
                 <div style={{ display: "flex", gap: 6, marginTop: 4, fontSize: 11, fontWeight: 700 }}>
-                  <span style={{ color: "#34d399" }}>{countsByStatus.HIGH || 0} Alta</span>
+                  <span style={{ color: "#34d399" }}>{countsByStatus.HIGH || 0} High</span>
                   <span style={{ color: "#38bdf8" }}>{countsByStatus.MODERATE || 0} Med</span>
-                  <span style={{ color: "#fbbf24" }}>{countsByStatus.LOW || 0} Baja</span>
+                  <span style={{ color: "#fbbf24" }}>{countsByStatus.LOW || 0} Low</span>
                   <span style={{ color: "#f43f5e" }}>{countsByStatus.DEAD || 0} Inact</span>
                 </div>
-                <div className="muted" style={{ fontSize: 10, marginTop: 2 }}>Sobre {rankedChannelsList.length} canales totales</div>
+                <div className="muted" style={{ fontSize: 10, marginTop: 2 }}>Across {rankedChannelsList.length} total channels</div>
               </div>
             </div>
 
             {/* Category summary pills */}
             {attributionReport.categories_summary && (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                <span className="muted" style={{ fontSize: 11, fontWeight: 600 }}>Impacto por Categoría:</span>
+                <span className="muted" style={{ fontSize: 11, fontWeight: 600 }}>Impact by Category:</span>
                 {Object.entries(attributionReport.categories_summary as Record<string, Dict>).map(([catName, catData]) => (
                   <div
                     key={catName}
@@ -2327,7 +2562,7 @@ export function NetworkTopologyTab({
                       {Number(catData.avg_importance ?? 0).toFixed(3)}
                     </span>
                     <span className="muted" style={{ fontSize: 9 }}>
-                      ({catData.active_channels}/{catData.total_channels} activos)
+                      ({catData.active_channels}/{catData.total_channels} active)
                     </span>
                   </div>
                 ))}
@@ -2337,15 +2572,15 @@ export function NetworkTopologyTab({
             {/* Filter buttons & Table */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4, flexWrap: "wrap", gap: 6 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#cbd5e1" }}>
-                Ranking Detallado de Sensibilidad y Ablación
+                Detailed Sensitivity &amp; Ablation Ranking
               </div>
               <div style={{ display: "flex", gap: 4 }}>
                 {[
-                  { id: "all", label: `Todos (${rankedChannelsList.length})` },
-                  { id: "HIGH_EFFECTIVENESS", label: `Alta (${countsByStatus.HIGH || 0})` },
-                  { id: "MODERATE_EFFECTIVENESS", label: `Media (${countsByStatus.MODERATE || 0})` },
-                  { id: "LOW_EFFECTIVENESS", label: `Baja (${countsByStatus.LOW || 0})` },
-                  { id: "DEAD_CHANNEL", label: `Inactiva (${countsByStatus.DEAD || 0})` },
+                  { id: "all", label: `All (${rankedChannelsList.length})` },
+                  { id: "HIGH_EFFECTIVENESS", label: `High (${countsByStatus.HIGH || 0})` },
+                  { id: "MODERATE_EFFECTIVENESS", label: `Moderate (${countsByStatus.MODERATE || 0})` },
+                  { id: "LOW_EFFECTIVENESS", label: `Low (${countsByStatus.LOW || 0})` },
+                  { id: "DEAD_CHANNEL", label: `Inactive (${countsByStatus.DEAD || 0})` },
                 ].map((btn) => (
                   <button
                     key={btn.id}
@@ -2383,13 +2618,13 @@ export function NetworkTopologyTab({
                 <thead style={{ background: "#0f172a", position: "sticky", top: 0, zIndex: 1, borderBottom: "1px solid #334155" }}>
                   <tr>
                     <th style={{ padding: "8px 10px", width: 45 }}>Rank</th>
-                    <th style={{ padding: "8px 10px" }}>Canal</th>
-                    <th style={{ padding: "8px 10px" }}>Categoría</th>
-                    <th style={{ padding: "8px 10px" }}>Estado</th>
-                    <th style={{ padding: "8px 10px", minWidth: 160 }}>Puntuación Compuesta</th>
-                    <th style={{ padding: "8px 10px" }}>Gradiente (π / v)</th>
-                    <th style={{ padding: "8px 10px" }}>Ablación (Flip / Δv)</th>
-                    <th style={{ padding: "8px 10px", minWidth: 200 }}>Diagnóstico / Recomendación</th>
+                    <th style={{ padding: "8px 10px" }}>Channel</th>
+                    <th style={{ padding: "8px 10px" }}>Category</th>
+                    <th style={{ padding: "8px 10px" }}>Status</th>
+                    <th style={{ padding: "8px 10px", minWidth: 160 }}>Composite Score</th>
+                    <th style={{ padding: "8px 10px" }}>Gradient (π / v)</th>
+                    <th style={{ padding: "8px 10px" }}>Ablation (Flip / Δv)</th>
+                    <th style={{ padding: "8px 10px", minWidth: 200 }}>Diagnostic / Recommendation</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2441,12 +2676,12 @@ export function NetworkTopologyTab({
                             }}
                           >
                             {rc.status === "HIGH_EFFECTIVENESS"
-                              ? "ALTA"
+                              ? "HIGH"
                               : rc.status === "MODERATE_EFFECTIVENESS"
-                              ? "MEDIA"
+                              ? "MODERATE"
                               : rc.status === "LOW_EFFECTIVENESS"
-                              ? "BAJA"
-                              : "INACTIVA"}
+                              ? "LOW"
+                              : "INACTIVE"}
                           </span>
                         </td>
                         <td style={{ padding: "6px 10px" }}>
@@ -2493,10 +2728,10 @@ export function NetworkTopologyTab({
         {!attributionReport && !analyzing && (
           <div style={{ background: "#0f172a", border: "1px dashed #334155", borderRadius: 6, padding: "16px", textAlign: "center" }}>
             <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 6 }}>
-              Aún no se ha calculado el análisis de efectividad de canales para la ejecución <b>{runId}</b>.
+              Channel effectiveness analysis has not yet been computed for run <b>{runId}</b>.
             </div>
             <div className="muted" style={{ fontSize: 11, maxWidth: 500, margin: "0 auto 12px auto" }}>
-              Haz clic en el botón superior para ejecutar el análisis empírico en tiempo real (recolecta muestras con el simulador VOEC, evalúa saliencia de gradientes y mide la degradación de política y valor tras oclusión).
+              Click the button above to run real-time empirical analysis (samples rollouts with VOEC simulator, evaluates gradient saliency, and measures policy/value degradation under occlusion).
             </div>
             <button
               onClick={handleRunAnalysis}
@@ -2511,14 +2746,15 @@ export function NetworkTopologyTab({
                 cursor: "pointer",
               }}
             >
-              ⚡ Ejecutar Análisis Ahora
+              ⚡ Run Analysis Now
             </button>
           </div>
         )}
       </div>
       )}
+    
 
-      {/* SECTION 4: HIERARCHICAL STRATEGIC MACRO-PLANNER (LEVEL 1) */}
+      {/* SECTION 4: HIERARCHICAL STRATEGIC MACRO-PLANNER (H-EZ-M v3.0) */}
       {currentSubTab === "macro-planner" && (
         <div
           style={{
@@ -2535,72 +2771,93 @@ export function NetworkTopologyTab({
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
             <div>
               <h4 style={{ margin: 0, fontSize: 16, color: "#38bdf8", display: "flex", alignItems: "center", gap: 8 }}>
-                <span>♟️</span> Planificador Jerárquico Macro &amp; Perfilado Doctrinal (Jerarquía 3 Capas v2.4.5)
+                <span>♟️</span> H-EZ-M v3.0 Hierarchical Strategic Commander &amp; Doctrinal Profiling
               </h4>
-              <div className="muted" style={{ fontSize: 12, marginTop: 4, maxWidth: 880 }}>
-                Arquitectura de toma de decisiones desacoplada en tres niveles: <b>Capa 1 Físico-Balística (VOEC)</b>, <b>Capa 2 Sesgo Doctrinal Inductivo (8 roles canónicos, footprints 2D y 3 reglas jerárquicas de mutación contextual)</b> y <b>Capa 3 Micro-Táctica Autónoma Emergente (MCTS PUCT de 512 simulaciones y 6 pasos de unroll)</b>.
+              <div className="muted" style={{ fontSize: 12, marginTop: 4, maxWidth: 900 }}>
+                Decoupled four-tier decision architecture: <b>Tier 1 Physical &amp; Ballistic Invariants (VOEC)</b>, <b>Tier 2 Strategic Goal Heatmap (Manager Network Level 1)</b>, <b>Tier 3 Inductive Doctrinal Bias (8 canonical roles, 2D footprints &amp; contextual mutation rules)</b>, and <b>Tier 4 Autonomous Tactical Operator (Worker MCTS PUCT with 512 simulations and 6 unroll steps)</b>.
               </div>
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <span style={{ fontSize: 11, background: "rgba(126, 34, 206, 0.25)", border: "1px solid #a855f7", color: "#d8b4fe", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
-                3 Capas Ontológicas
+                4 Ontological Tiers
+              </span>
+              <span style={{ fontSize: 11, background: "rgba(14, 165, 233, 0.25)", border: "1px solid #0ea5e9", color: "#7dd3fc", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
+                Manager Network (H-EZ-M)
               </span>
               <span style={{ fontSize: 11, background: "rgba(234, 179, 8, 0.25)", border: "1px solid #eab308", color: "#fef08a", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
-                8 Roles Canónicos
+                8 Canonical Roles
               </span>
               <span style={{ fontSize: 11, background: "rgba(34, 197, 94, 0.25)", border: "1px solid #22c55e", color: "#86efac", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
                 Prior Shaping (+35% π)
               </span>
+              <span style={{ fontSize: 11, background: "rgba(244, 63, 94, 0.25)", border: "1px solid #f43f5e", color: "#fda4af", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
+                PCGrad Balancer
+              </span>
               <span style={{ fontSize: 11, background: "rgba(2, 132, 199, 0.25)", border: "1px solid #0284c7", color: "#38bdf8", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
-                v2.4.5 Activo
+                H-EZ-M v3.0 Active
               </span>
             </div>
           </div>
 
-          {/* TOP ARCHITECTURAL BREAKDOWN: THE 3 ONTOLOGICAL LAYERS */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
-            {/* Layer 1 */}
+          {/* TOP ARCHITECTURAL BREAKDOWN: THE 4 ONTOLOGICAL TIERS */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+            {/* Tier 1 */}
             <div style={{ background: "#0b1329", border: "1px solid #1e3a8a", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 12, fontWeight: 800, color: "#38bdf8", textTransform: "uppercase" }}>
-                  1. Capa Físico-Balística
+                  1. Physical &amp; Ballistic Tier
                 </span>
                 <span style={{ fontSize: 9, background: "#1e3a8a", color: "#bfdbfe", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
                   VOEC Hard Rules
                 </span>
               </div>
               <div style={{ fontSize: 11, color: "#cbd5e1", lineHeight: 1.4 }}>
-                Invariantes mecánicos e inviolables del simulador: línea de visión (LOS) hexágono a hexágono, alcances estrictos de tiro, costes de movimiento, blindajes y tabla balística. La IA no puede transgredir la física ni disparar fuera de alcance.
+                Mechanical and inviolable simulator invariants: hexagon-to-hexagon line of sight (LOS), strict weapon firing ranges, terrain movement costs, armor protection tables, and dice combat resolution. Latent dynamics g<sub>θ</sub> learns this invariant physics across all scenarios.
               </div>
             </div>
 
-            {/* Layer 2 */}
+            {/* Tier 2 */}
+            <div style={{ background: "#0b2027", border: "1px solid #0e7490", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: "#22d3ee", textTransform: "uppercase" }}>
+                  2. Strategic Goal Heatmap
+                </span>
+                <span style={{ fontSize: 9, background: "#155e75", color: "#cffafe", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
+                  Manager Network
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: "#cbd5e1", lineHeight: 1.4 }}>
+                Macro-strategy neural module operating on a multi-turn cycle (T ≤ 8). Generates spatial macro-goal tensors (16×16 heatmaps) and operational modes (Assault VP, Defensive Hold, Zone Suppress) conditioned via FiLM bridge into worker latent space.
+              </div>
+            </div>
+
+            {/* Tier 3 */}
             <div style={{ background: "#1a1329", border: "1px solid #7e22ce", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 12, fontWeight: 800, color: "#d8b4fe", textTransform: "uppercase" }}>
-                  2. Capa Doctrinal Inductiva
+                  3. Inductive Doctrinal Bias
                 </span>
                 <span style={{ fontSize: 9, background: "#581c87", color: "#f3e8ff", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                  Soft Inductive Bias
+                  Soft Prior Shaping
                 </span>
               </div>
               <div style={{ fontSize: 11, color: "#cbd5e1", lineHeight: 1.4 }}>
-                Catálogo de 8 roles canónicos, huellas 2D de alcance óptimo (canales 24/25), 3 reglas jerárquicas de mutación contextual y modulación de priors (+35% π) en la raíz MCTS. Orienta inductivamente a las escuadras hacia su función militar idónea sin encorsetar rígidamente.
+                Catalog of 8 canonical roles, 2D optimal engagement footprints (channels 24/25), 3 cascading contextual mutation rules, Dunnigan Tactical Reserve, and Henry Hyde tactical cohesion. Injects soft +35% π prior shaping at the MCTS root.
               </div>
             </div>
 
-            {/* Layer 3 */}
+            {/* Tier 4 */}
             <div style={{ background: "#062318", border: "1px solid #047857", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 12, fontWeight: 800, color: "#4ade80", textTransform: "uppercase" }}>
-                  3. Capa Micro-Táctica
+                  4. Tactical Operator MCTS
                 </span>
                 <span style={{ fontSize: 9, background: "#065f46", color: "#a7f3d0", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                  Emergente / RL Puro
+                  Worker RL Search
                 </span>
               </div>
               <div style={{ fontSize: 11, color: "#cbd5e1", lineHeight: 1.4 }}>
-                Búsqueda Monte Carlo profunda (512 simulaciones, 6 pasos unroll) y reanálisis off-policy. Descubre sutilezas tácticas autónomas: emboscadas en cobertura, fuego combinado de supresión y asalto, y anulación del prior por Q(s, a) si halla una jugada superior.
+                Deep Monte Carlo Tree Search (512 simulations, 6 unroll steps) with Two-Hot categorical value/reward representation, batched temporal consistency loss, and autonomous Q(s, a) override if search proves a superior tactical payoff.
               </div>
             </div>
           </div>
@@ -2608,24 +2865,24 @@ export function NetworkTopologyTab({
           {/* KPI Summary Cards */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
             <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "10px 12px" }}>
-              <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Posturas Estratégicas (Nivel 1)</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: "#f8fafc", marginTop: 2 }}>3 Modos Operacionales</div>
+              <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Macro Strategic Postures (Level 1)</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#f8fafc", marginTop: 2 }}>3 Operational Modes</div>
               <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 2 }}>ASSAULT_VP • DEFENSIVE_HOLD • ZONE_SUPPRESS</div>
             </div>
             <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "10px 12px" }}>
-              <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Roles Doctrinales de Escuadra</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: "#facc15", marginTop: 2 }}>8 Roles Canónicos</div>
+              <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Squad Doctrinal Roles</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#facc15", marginTop: 2 }}>8 Canonical Roles</div>
               <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 2 }}>Spearhead • Fire Support • Close Def • Recon...</div>
             </div>
             <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "10px 12px" }}>
-              <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Reglas de Mutación Contextual</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: "#f43f5e", marginTop: 2 }}>3 Reglas Jerárquicas</div>
-              <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 2 }}>Presión VPs • Moral/Salud • Aislamiento Apoyo</div>
+              <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Contextual Mutation Rules</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#f43f5e", marginTop: 2 }}>3 Priority Rules</div>
+              <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 2 }}>VP Pressure • Morale/Health • Flank Isolation</div>
             </div>
             <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "10px 12px" }}>
-              <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Modulación MCTS Prior</div>
+              <div className="muted" style={{ fontSize: 10, textTransform: "uppercase" }}>Root Prior Modulation</div>
               <div style={{ fontSize: 15, fontWeight: 800, color: "#22c55e", marginTop: 2 }}>+35% Prior Shaping</div>
-              <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 2 }}>P_mod(a) = P(a) * (1 + 0.35) en la raíz</div>
+              <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 2 }}>P_mod(a) = P(a) * (1 + 0.35) at root</div>
             </div>
           </div>
 
@@ -2634,17 +2891,17 @@ export function NetworkTopologyTab({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 800, color: "#38bdf8", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-                  <span>📊</span> Telemetría Táctica Empírica: ¿Qué Tácticas Usa Este Modelo?
+                  <span>📊</span> Empirical Tactical Telemetry: Observed In-Game Model Behaviors
                 </div>
                 <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
                   {macroStats.hasRealData
-                    ? `Calculado sobre ${macroStats.totalSteps} decisiones registradas en partidas de evaluación de ${runId}.`
-                    : `No hay decisiones registradas en evaluaciones para este modelo. Ejecute una evaluación para recopilar telemetría empírica.`}
+                    ? `Calculated over ${macroStats.totalSteps} recorded decisions in evaluation matches for ${runId}.`
+                    : `No evaluation match decisions recorded for this model. Run an evaluation to collect empirical telemetry.`}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <span style={{ fontSize: 10, background: macroStats.hasRealData ? "rgba(34, 197, 94, 0.2)" : "rgba(100, 116, 139, 0.2)", border: `1px solid ${macroStats.hasRealData ? "#22c55e" : "#64748b"}`, color: macroStats.hasRealData ? "#4ade80" : "#94a3b8", padding: "2px 8px", borderRadius: 4, fontWeight: 700 }}>
-                  {macroStats.hasRealData ? "✓ Partidas de Evaluación" : "Sin Datos de Evaluación"}
+                  {macroStats.hasRealData ? "✓ Evaluation Matches" : "No Evaluation Data"}
                 </span>
                 <button
                   onClick={() => {
@@ -2664,24 +2921,24 @@ export function NetworkTopologyTab({
                     alignItems: "center",
                     gap: 6,
                   }}
-                  title="Abrir visor de partidas para ver la táctica hexágono a hexágono"
+                  title="Open match replay viewer to inspect hex-by-hex tactics"
                 >
-                  <span>▶️</span> Ver en Replay Táctico
+                  <span>▶️</span> View in Tactical Replay
                 </button>
               </div>
             </div>
 
             {/* Three Progress Bar Grids */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
-              {/* Box 1: Posturas Macro Reales */}
+              {/* Box 1: Macro Posture Distribution */}
               <div style={{ background: "#1e293b", padding: 10, borderRadius: 6, display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#f8fafc", textTransform: "uppercase" }}>
-                  1. Distribución de Posturas Macro
+                  1. Macro Posture Distribution
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
-                      <span style={{ color: "#f87171", fontWeight: 700 }}>⚔️ ASSAULT_VP (Asalto Ofensivo)</span>
+                      <span style={{ color: "#f87171", fontWeight: 700 }}>⚔️ ASSAULT_VP (Offensive Assault)</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.assaultPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
@@ -2691,7 +2948,7 @@ export function NetworkTopologyTab({
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
-                      <span style={{ color: "#38bdf8", fontWeight: 700 }}>🛡️ DEFENSIVE_HOLD (Consolidación)</span>
+                      <span style={{ color: "#38bdf8", fontWeight: 700 }}>🛡️ DEFENSIVE_HOLD (Consolidation)</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.defPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
@@ -2701,7 +2958,7 @@ export function NetworkTopologyTab({
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
-                      <span style={{ color: "#c084fc", fontWeight: 700 }}>💥 ZONE_SUPPRESS (Supresión)</span>
+                      <span style={{ color: "#c084fc", fontWeight: 700 }}>💥 ZONE_SUPPRESS (Zone Suppression)</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.zonePct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 6, borderRadius: 3, overflow: "hidden" }}>
@@ -2711,18 +2968,18 @@ export function NetworkTopologyTab({
                 </div>
               </div>
 
-              {/* Box 2: Los 8 Roles Doctrinales Canónicos */}
+              {/* Box 2: The 8 Doctrinal Roles in Battle */}
               <div style={{ background: "#1e293b", padding: 10, borderRadius: 6, display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#f8fafc", textTransform: "uppercase" }}>
-                    2. Los 8 Roles Doctrinales en Batalla
+                    2. The 8 Doctrinal Roles in Battle
                   </div>
-                  <span style={{ fontSize: 9, color: "#94a3b8" }}>Canónicos</span>
+                  <span style={{ fontSize: 9, color: "#94a3b8" }}>Canonical</span>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 12px" }}>
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
-                      <span style={{ color: "#facc15", fontWeight: 700 }}>⚡ Punta de Lanza</span>
+                      <span style={{ color: "#facc15", fontWeight: 700 }}>⚡ Spearhead</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.spearheadPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
@@ -2732,7 +2989,7 @@ export function NetworkTopologyTab({
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
-                      <span style={{ color: "#fb923c", fontWeight: 700 }}>🎯 Apoyo de Fuego</span>
+                      <span style={{ color: "#fb923c", fontWeight: 700 }}>🎯 Fire Support</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.fireSupportPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
@@ -2742,7 +2999,7 @@ export function NetworkTopologyTab({
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
-                      <span style={{ color: "#ef4444", fontWeight: 700 }}>⚔️ Defensa Cercana</span>
+                      <span style={{ color: "#ef4444", fontWeight: 700 }}>⚔️ Close Defense</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.closeDefPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
@@ -2752,7 +3009,7 @@ export function NetworkTopologyTab({
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
-                      <span style={{ color: "#38bdf8", fontWeight: 700 }}>🔭 Reconocimiento</span>
+                      <span style={{ color: "#38bdf8", fontWeight: 700 }}>🔭 Recon</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.reconPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
@@ -2762,7 +3019,7 @@ export function NetworkTopologyTab({
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
-                      <span style={{ color: "#60a5fa", fontWeight: 700 }}>🛡️ Defensor VP</span>
+                      <span style={{ color: "#60a5fa", fontWeight: 700 }}>🛡️ VP Defender</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.defenderPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
@@ -2772,7 +3029,7 @@ export function NetworkTopologyTab({
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
-                      <span style={{ color: "#c084fc", fontWeight: 700 }}>👁️ Pantalla Flanco</span>
+                      <span style={{ color: "#c084fc", fontWeight: 700 }}>👁️ Flank Screen</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.flankPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
@@ -2782,7 +3039,7 @@ export function NetworkTopologyTab({
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
-                      <span style={{ color: "#a855f7", fontWeight: 700 }}>🏛️ Reserva Táctica</span>
+                      <span style={{ color: "#a855f7", fontWeight: 700 }}>🏛️ Tactical Reserve</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.reservePct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
@@ -2792,7 +3049,7 @@ export function NetworkTopologyTab({
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, marginBottom: 2 }}>
-                      <span style={{ color: "#f43f5e", fontWeight: 700 }}>🩹 Recuperación</span>
+                      <span style={{ color: "#f43f5e", fontWeight: 700 }}>🩹 Recovery</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.recoverPct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
@@ -2802,15 +3059,15 @@ export function NetworkTopologyTab({
                 </div>
               </div>
 
-              {/* Box 3: Dinámica de Combate, Mutaciones & MCTS */}
+              {/* Box 3: Combat Dynamics, Mutations & MCTS */}
               <div style={{ background: "#1e293b", padding: 10, borderRadius: 6, display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#f8fafc", textTransform: "uppercase" }}>
-                  3. Dinámica de Combate, Mutaciones &amp; MCTS
+                  3. Combat Dynamics, Mutations &amp; MCTS
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
-                      <span style={{ color: "#38bdf8", fontWeight: 700 }}>🏃 Maniobra / Avance</span>
+                      <span style={{ color: "#38bdf8", fontWeight: 700 }}>🏃 Maneuver / Advance</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.movePct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
@@ -2820,7 +3077,7 @@ export function NetworkTopologyTab({
 
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2 }}>
-                      <span style={{ color: "#ef4444", fontWeight: 700 }}>💥 Fuego &amp; Ataque</span>
+                      <span style={{ color: "#ef4444", fontWeight: 700 }}>💥 Fire &amp; Attack</span>
                       <span style={{ color: "#cbd5e1" }}>{macroStats.hasRealData ? `${macroStats.firePct.toFixed(1)}%` : "N/A"}</span>
                     </div>
                     <div style={{ background: "#0f172a", height: 5, borderRadius: 3, overflow: "hidden" }}>
@@ -2830,25 +3087,25 @@ export function NetworkTopologyTab({
 
                   <div style={{ marginTop: 2, background: "#0f172a", padding: "5px 8px", borderRadius: 4, borderLeft: "3px solid #f43f5e" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: 9.5, color: "#f43f5e", fontWeight: 700 }}>⚡ Mutaciones Contextuales:</span>
+                      <span style={{ fontSize: 9.5, color: "#f43f5e", fontWeight: 700 }}>⚡ Contextual Mutations:</span>
                       <span style={{ fontSize: 10.5, fontWeight: 800, color: "#f43f5e" }}>
                         {macroStats.hasRealData ? `${macroStats.mutatedPct.toFixed(1)}%` : "N/A"}
                       </span>
                     </div>
                     <div className="muted" style={{ fontSize: 9 }}>
-                      {macroStats.hasRealData ? `${macroStats.mutatedCount} decisiones con cambio dinámico de rol.` : "Evaluación requerida."}
+                      {macroStats.hasRealData ? `${macroStats.mutatedCount} decisions with dynamic role mutation.` : "Evaluation required."}
                     </div>
                   </div>
 
                   <div style={{ background: "#0f172a", padding: "5px 8px", borderRadius: 4, borderLeft: "3px solid #38bdf8" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: 9.5, color: "#38bdf8", fontWeight: 700 }}>🧠 Sobreescritura MCTS:</span>
+                      <span style={{ fontSize: 9.5, color: "#38bdf8", fontWeight: 700 }}>🧠 MCTS Override:</span>
                       <span style={{ fontSize: 10.5, fontWeight: 800, color: "#38bdf8" }}>
                         {macroStats.hasRealData ? `${macroStats.mctsOverridePct.toFixed(1)}%` : "N/A"}
                       </span>
                     </div>
                     <div className="muted" style={{ fontSize: 9 }}>
-                      {macroStats.hasRealData ? "El árbol MCTS corrigió el prior neural para imponer la postura." : "Evaluación requerida."}
+                      {macroStats.hasRealData ? "MCTS tree search corrected neural prior to enforce tactical posture." : "Evaluation required."}
                     </div>
                   </div>
                 </div>
@@ -2858,30 +3115,30 @@ export function NetworkTopologyTab({
 
           {/* TWO MAIN COLUMNS: POSTURES & COMPLETE 8 ROLES CATALOG */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            {/* COLUMN 1: POSTURAS ESTRATÉGICAS */}
+            {/* COLUMN 1: STRATEGIC POSTURES */}
             <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 13, fontWeight: 800, color: "#38bdf8", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-                  <span>🎯</span> Posturas Estratégicas Macro
+                  <span>🎯</span> Macro Strategic Postures
                 </span>
-                <span style={{ fontSize: 10, color: "#64748b" }}>Evaluadas al inicio de cada turno</span>
+                <span style={{ fontSize: 10, color: "#64748b" }}>Evaluated at start of each turn cycle</span>
               </div>
               <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                El planificador evalúa el estado del marcador de Puntos de Victoria (VPs) y asigna la postura del bando completo:
+                The macro planner evaluates Victory Point (VP) dynamics and issues team-wide strategic directives:
               </div>
 
               {/* POSTURE 1: ASSAULT_VP */}
               <div style={{ background: "#1e293b", border: "1px solid #ef4444", borderRadius: 6, padding: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "#f87171", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>⚔️</span> ASSAULT_VP (Asalto Ofensivo)
+                    <span>⚔️</span> ASSAULT_VP (Offensive Assault)
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(239, 68, 68, 0.2)", color: "#fca5a5", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                    VPs Aliados ≤ Enemigos
+                    Allied VPs ≤ Enemy VPs
                   </span>
                 </div>
                 <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                  Disparada cuando el equipo está empatado o por detrás en el marcador. Fija el <b>Objetivo Prioritario</b> en el VP neutral o enemigo más cercano y aumenta en un <b>+35%</b> el prior de las acciones que cierran distancia hacia él.
+                  Triggered when tied or trailing in victory points. Sets the <b>Priority Objective</b> to the nearest neutral or enemy VP and boosts actions closing distance toward it by <b>+35%</b>.
                 </div>
               </div>
 
@@ -2889,14 +3146,14 @@ export function NetworkTopologyTab({
               <div style={{ background: "#1e293b", border: "1px solid #0284c7", borderRadius: 6, padding: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "#38bdf8", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>🛡️</span> DEFENSIVE_HOLD (Consolidación)
+                    <span>🛡️</span> DEFENSIVE_HOLD (Consolidation)
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(2, 132, 199, 0.2)", color: "#7dd3fc", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                    VPs Aliados &gt; Enemigos
+                    Allied VPs &gt; Enemy VPs
                   </span>
                 </div>
                 <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                  Disparada cuando el equipo lidera el control de objetivos pero el escenario no ha concluido. Ordena atrincherar escuadras en radio de 1 hex sobre los VPs aliados y penaliza maniobras arriesgadas de sobre-extensión.
+                  Triggered when leading in VPs while the match is underway. Orders squads to entrench within a 1-hex radius of allied VPs and penalizes reckless over-extension.
                 </div>
               </div>
 
@@ -2904,72 +3161,72 @@ export function NetworkTopologyTab({
               <div style={{ background: "#1e293b", border: "1px solid #8b5cf6", borderRadius: 6, padding: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "#c084fc", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>💥</span> ZONE_SUPPRESS (Supresión de Zona)
+                    <span>💥</span> ZONE_SUPPRESS (Zone Suppression)
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(139, 92, 246, 0.2)", color: "#d8b4fe", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                    100% VPs Consolidados
+                    100% VPs Consolidated
                   </span>
                 </div>
                 <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                  Disparada cuando todos los objetivos del escenario han sido capturados y asegurados. Reorienta las escuadras hacia la supresión metódica, fuego cruzado y aniquilación de cualquier amenaza enemiga restante.
+                  Triggered when all scenario victory objectives are captured. Reorients squads toward methodical suppression, crossfire traps, and eliminating lingering hostiles.
                 </div>
               </div>
             </div>
 
-            {/* COLUMN 2: REGLAS JERÁRQUICAS DE MUTACIÓN CONTEXTUAL */}
+            {/* COLUMN 2: HIERARCHICAL CONTEXTUAL MUTATION RULES */}
             <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 13, fontWeight: 800, color: "#f43f5e", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-                  <span>⚡</span> 3 Reglas Jerárquicas de Mutación Contextual
+                  <span>⚡</span> 3 Hierarchical Contextual Mutation Rules
                 </span>
-                <span style={{ fontSize: 10, color: "#64748b" }}>Prioridad Estricta en Ejecución</span>
+                <span style={{ fontSize: 10, color: "#64748b" }}>Strict Cascading Priority</span>
               </div>
               <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                En cada paso de inferencia, las escuadras evalúan en cascada estas reglas para adaptar dinámicamente su rol frente a la evolución del combate:
+                At each inference step, squads evaluate these rules in strict priority order to dynamically adapt their doctrinal role:
               </div>
 
-              {/* RULE 2: MORALE & CRITICAL HEALTH */}
+              {/* RULE 1: MORALE & CRITICAL HEALTH */}
               <div style={{ background: "#1e293b", border: "1px solid #f43f5e", borderRadius: 6, padding: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "#fda4af", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>🚨</span> Prioridad 1: Moral y Salud Crítica
+                    <span>🚨</span> Priority 1: Morale &amp; Critical Health
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(244, 63, 94, 0.2)", color: "#fecdd3", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
                     ➔ ROLE_RECOVER
                   </span>
                 </div>
                 <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                  <b>Trigger:</b> Unidad en <code>PINNED</code>, <code>SUPPRESSED</code>, <code>FALLBACK</code>, o fuerza &le; umbral de repliegue o regla del 50% de Hyde fuera de edificios (BUA) o VPs. <b>Efecto:</b> Muta de inmediato a <code>ROLE_RECOVER</code> para priorizar cobertura, reagrupamiento y evitar la destrucción.
+                  <b>Trigger:</b> Unit in <code>PINNED</code>, <code>SUPPRESSED</code>, <code>FALLBACK</code>, or health &le; retreat threshold (Hyde 50% rule outside BUA/VPs). <b>Effect:</b> Instantly mutates to <code>ROLE_RECOVER</code> to seek defilade cover and rally.
                 </div>
               </div>
 
-              {/* RULE 3: FLANKED HEAVY SUPPORT */}
+              {/* RULE 2: FLANKED HEAVY SUPPORT */}
               <div style={{ background: "#1e293b", border: "1px solid #ef4444", borderRadius: 6, padding: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "#f87171", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>⚠️</span> Prioridad 2: Aislamiento / Flanqueo Inmediato
+                    <span>⚠️</span> Priority 2: Isolation / Immediate Flank Threat
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(239, 68, 68, 0.2)", color: "#fca5a5", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
                     ➔ ROLE_CLOSE_DEFENSE
                   </span>
                 </div>
                 <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                  <b>Trigger:</b> Unidad de armas pesadas (<code>FIRE_SUPPORT</code>) con enemigo adyacente (distancia &le; 1 hex) sin escolta aliada cercana. <b>Efecto:</b> Muta a <code>ROLE_CLOSE_DEFENSE</code>, priorizando autodefensa y fuego a quemarropa.
+                  <b>Trigger:</b> Heavy support squad (<code>FIRE_SUPPORT</code>) with enemy adjacent (distance &le; 1 hex) without friendly infantry escort. <b>Effect:</b> Mutates to <code>ROLE_CLOSE_DEFENSE</code>, prioritizing survival and point-blank fire.
                 </div>
               </div>
 
-              {/* RULE 1: VP DEFICIT PRESSURE */}
+              {/* RULE 3: VP DEFICIT PRESSURE */}
               <div style={{ background: "#1e293b", border: "1px solid #eab308", borderRadius: 6, padding: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "#fde047", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>⚔️</span> Prioridad 3: Presión Decisiva de VPs
+                    <span>⚔️</span> Priority 3: Decisive VP Pressure
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(234, 179, 8, 0.2)", color: "#fef08a", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
                     ➔ ROLE_SPEARHEAD
                   </span>
                 </div>
                 <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                  <b>Trigger:</b> Déficit en marcador de VPs o fase tardía de la partida (t &ge; 2/3 T_max) con VPs sin capturar. <b>Efecto:</b> Tropas en roles de apoyo o pantalla con permiso mutan a <code>ROLE_SPEARHEAD</code> para un asalto decisivo coordinado.
+                  <b>Trigger:</b> VP deficit or late match phase (t &ge; 2/3 T_max) with unconquered VPs. <b>Effect:</b> Qualified support or screening units mutate to <code>ROLE_SPEARHEAD</code> for a coordinated breakthrough assault.
                 </div>
               </div>
 
@@ -2977,14 +3234,14 @@ export function NetworkTopologyTab({
               <div style={{ background: "#1e293b", border: "1px solid #a855f7", borderRadius: 6, padding: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "#d8b4fe", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>🏛️</span> Reserva Táctica Dunnigan
+                    <span>🏛️</span> Dunnigan Tactical Reserve
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(168, 85, 247, 0.2)", color: "#e9d5ff", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
                     ➔ ROLE_TACTICAL_RESERVE
                   </span>
                 </div>
                 <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                  <b>Trigger:</b> Fuerza &ge; 4 escuadras y unidades en retaguardia a más de 5 hexágonos del objetivo. <b>Efecto:</b> Reserva táctica de reacción para taponar brechas o explotar rupturas.
+                  <b>Trigger:</b> Total force &ge; 4 squads and units located &gt; 5 hexes behind the active front line. <b>Effect:</b> Mobile reaction reserve held to plug enemy penetrations or exploit breakouts.
                 </div>
               </div>
             </div>
@@ -2995,14 +3252,14 @@ export function NetworkTopologyTab({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
               <div>
                 <span style={{ fontSize: 13, fontWeight: 800, color: "#facc15", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-                  <span>👥</span> Catálogo Canónico de los 8 Roles Doctrinales (Jerarquía de Perfiles)
+                  <span>👥</span> Canonical Catalog of the 8 Doctrinal Roles (Profile Hierarchy)
                 </span>
                 <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                  Definidos en <code>assets/catalogs/unit_catalog.json</code> y tipados rígidamente en <code>DoctrineProfile</code>.
+                  Defined in <code>assets/catalogs/unit_catalog.json</code> and strictly typed in <code>DoctrineProfile</code>.
                 </div>
               </div>
               <span style={{ fontSize: 10, background: "rgba(234, 179, 8, 0.2)", color: "#fef08a", border: "1px solid #eab308", padding: "2px 8px", borderRadius: 4, fontWeight: 700 }}>
-                100% de 19 Unidades Cubiertas
+                100% of 19 Units Covered
               </span>
             </div>
 
@@ -3014,11 +3271,11 @@ export function NetworkTopologyTab({
                     <span>⚡</span> ROLE_SPEARHEAD
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(234, 179, 8, 0.15)", color: "#fef08a", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                    Punta de Lanza / Choque
+                    Spearhead / Assault Shock
                   </span>
                 </div>
                 <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
-                  <b>Unidades:</b> Fusileros de asalto, Fallschirmjäger, Blindados medios. <b>Rango:</b> 0-2 hexes. <b>Misión:</b> Ruptura de línea enemiga y asalto directo a VPs prioritarios.
+                  <b>Units:</b> Assault infantry, Fallschirmjäger, Medium Armor. <b>Range:</b> 0-2 hexes. <b>Mission:</b> Frontline breakthrough and direct assault on priority VPs.
                 </div>
               </div>
 
@@ -3029,11 +3286,11 @@ export function NetworkTopologyTab({
                     <span>🎯</span> ROLE_FIRE_SUPPORT
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(249, 115, 22, 0.15)", color: "#fed7aa", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                    Apoyo de Fuego Pesado
+                    Heavy Fire Support
                   </span>
                 </div>
                 <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
-                  <b>Unidades:</b> HMG .50 M2HB, MMG M1919A4, MG42, Morteros 60mm/81mm, Cañones AT. <b>Rango:</b> 3-8 hexes. <b>Misión:</b> Supresión continua, fijación de enemigos e interdicción.
+                  <b>Units:</b> .50 M2HB HMG, M1919A4 MMG, MG42, 60mm/81mm Mortars, AT Guns. <b>Range:</b> 3-8 hexes. <b>Mission:</b> Continuous suppression, pinning enemy units, and area interdiction.
                 </div>
               </div>
 
@@ -3044,11 +3301,11 @@ export function NetworkTopologyTab({
                     <span>⚔️</span> ROLE_CLOSE_DEFENSE
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(239, 68, 68, 0.15)", color: "#fca5a5", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                    Defensa Cercana / Quemarropa
+                    Close Defense / Point-Blank
                   </span>
                 </div>
                 <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
-                  <b>Unidades:</b> Armas pesadas flanqueadas o escuadras amenazadas a distancia &le; 1 hex. <b>Rango:</b> 0-1 hex. <b>Misión:</b> Fuego reactivo defensivo de autoprotección inmediata.
+                  <b>Units:</b> Flanked heavy weapons or threatened squads at distance &le; 1 hex. <b>Range:</b> 0-1 hex. <b>Mission:</b> Immediate point-blank reactive fire and defensive survival.
                 </div>
               </div>
 
@@ -3059,11 +3316,11 @@ export function NetworkTopologyTab({
                     <span>🔭</span> ROLE_RECON
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(56, 189, 248, 0.15)", color: "#bae6fd", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                    Exploración &amp; Ojos Tácticos
+                    Recon &amp; Tactical Spotting
                   </span>
                 </div>
                 <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
-                  <b>Unidades:</b> Jeeps de reconocimiento, Rangers, Snipers, patrullas ligeras. <b>Rango:</b> 4-10 hexes. <b>Misión:</b> Despeje de niebla de guerra, detección temprana y señalamiento.
+                  <b>Units:</b> Scout jeeps, Rangers, Snipers, light patrols. <b>Range:</b> 4-10 hexes. <b>Mission:</b> Fog-of-war clearing, early enemy detection, and target spotting.
                 </div>
               </div>
 
@@ -3074,11 +3331,11 @@ export function NetworkTopologyTab({
                     <span>🛡️</span> ROLE_OBJECTIVE_DEFENDER
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(96, 165, 250, 0.15)", color: "#bfdbfe", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                    Defensor de Objetivo VP
+                    VP Objective Defender
                   </span>
                 </div>
                 <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
-                  <b>Unidades:</b> Escuadras sobre o a radio &le; 1 hex de VPs aliados. <b>Terreno:</b> Bunkers, trincheras, edificios de piedra. <b>Misión:</b> Atrincherarse y negar recaptura enemiga.
+                  <b>Units:</b> Squads on or within 1 hex of allied VPs. <b>Terrain:</b> Bunkers, trenches, stone buildings. <b>Mission:</b> Entrenchment and denial of enemy recaptures.
                 </div>
               </div>
 
@@ -3089,11 +3346,11 @@ export function NetworkTopologyTab({
                     <span>👁️</span> ROLE_FLANK_SCREEN
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(192, 132, 252, 0.15)", color: "#e9d5ff", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                    Pantalla de Flanco &amp; Seguridad
+                    Flank Screen &amp; Security
                   </span>
                 </div>
                 <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
-                  <b>Unidades:</b> Infantería ligera, tropas secundarias. <b>Rango:</b> 2-4 hexes. <b>Misión:</b> Cobertura de ángulos ciegos, aviso temprano y contención de envolvimientos.
+                  <b>Units:</b> Light infantry, secondary squads. <b>Range:</b> 2-4 hexes. <b>Mission:</b> Blind spot coverage, early warning, and containing enemy flanking attempts.
                 </div>
               </div>
 
@@ -3104,11 +3361,11 @@ export function NetworkTopologyTab({
                     <span>🏛️</span> ROLE_TACTICAL_RESERVE
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(168, 85, 247, 0.15)", color: "#f3e8ff", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                    Reserva Táctica Dunnigan
+                    Dunnigan Tactical Reserve
                   </span>
                 </div>
                 <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
-                  <b>Unidades:</b> Escuadras en retaguardia (distancia &gt; 5 del objetivo activo). <b>Misión:</b> Fuerza de reacción móvil para taponar brechas imprevistas o consolidar rupturas.
+                  <b>Units:</b> Rearguard squads (distance &gt; 5 hexes from active objective). <b>Mission:</b> Mobile reaction force to plug breaches or exploit breakthrough opportunities.
                 </div>
               </div>
 
@@ -3119,35 +3376,35 @@ export function NetworkTopologyTab({
                     <span>🩹</span> ROLE_RECOVER
                   </span>
                   <span style={{ fontSize: 9, background: "rgba(244, 63, 94, 0.15)", color: "#fecdd3", padding: "1px 6px", borderRadius: 3, fontWeight: 700 }}>
-                    Recuperación / Repliegue
+                    Recovery / Tactical Withdrawal
                   </span>
                 </div>
                 <div style={{ fontSize: 10.5, color: "#cbd5e1" }}>
-                  <b>Unidades:</b> Escuadras en pánico, suprimidas o desorganizadas (&lt;50% HP). <b>Misión:</b> Repliegue a posiciones de cobertura y desenfilada, rally y estabilización de moral.
+                  <b>Units:</b> Disorganized, suppressed, or heavily damaged squads (&lt;50% HP). <b>Mission:</b> Tactical withdrawal to cover/defilade, rally, and morale stabilization.
                 </div>
               </div>
             </div>
           </div>
 
-          {/* HYDE COHESION & PRIOR SHAPING MATHEMATICS */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            {/* Box A: Cohesión de Henry Hyde (2015) */}
+          {/* HYDE COHESION, PRIOR SHAPING & PCGRAD SURGERY */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
+            {/* Box A: Henry Hyde Cohesion (2015) */}
             <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: "#38bdf8", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-                <span>🛡️</span> Niveles de Cohesión Táctica (Henry Hyde, 2015)
+                <span>🛡️</span> Tactical Cohesion Levels (Henry Hyde, 2015)
               </div>
               <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                La proximidad entre escuadras amigas en buen orden modula la estabilidad táctica y la resistencia al pánico:
+                Proximity between friendly squads in good order modulates tactical stability and resilience against panic:
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11 }}>
                 <div style={{ background: "#1e293b", padding: "6px 10px", borderRadius: 4, borderLeft: "3px solid #22c55e" }}>
-                  <span style={{ color: "#4ade80", fontWeight: 700 }}>SUPPORTED (&le; 3 hexágonos):</span> Escuadra con apoyo mutuo inmediato. Moral óptima, bonificación de rally y sin penalización de pánico.
+                  <span style={{ color: "#4ade80", fontWeight: 700 }}>SUPPORTED (&le; 3 hexes):</span> Friendly squad in immediate mutual support. Optimal morale, rally bonus, no panic penalty.
                 </div>
                 <div style={{ background: "#1e293b", padding: "6px 10px", borderRadius: 4, borderLeft: "3px solid #facc15" }}>
-                  <span style={{ color: "#facc15", fontWeight: 700 }}>FRIENDS_CLOSE (&le; 6 hexágonos):</span> Cohesión de línea operativa estándar. Soporte a distancia de armas de apoyo.
+                  <span style={{ color: "#facc15", fontWeight: 700 }}>FRIENDS_CLOSE (&le; 6 hexes):</span> Standard operational battle line cohesion. Support within heavy weapon range.
                 </div>
                 <div style={{ background: "#1e293b", padding: "6px 10px", borderRadius: 4, borderLeft: "3px solid #ef4444" }}>
-                  <span style={{ color: "#f87171", fontWeight: 700 }}>ISOLATED (&gt; 6 hexágonos):</span> Escuadra aislada en territorio hostil. Alta vulnerabilidad a supresión y riesgo de colapso de moral.
+                  <span style={{ color: "#f87171", fontWeight: 700 }}>ISOLATED (&gt; 6 hexes):</span> Squad isolated in hostile territory. High vulnerability to suppression and morale collapse.
                 </div>
               </div>
             </div>
@@ -3155,10 +3412,10 @@ export function NetworkTopologyTab({
             {/* Box B: Prior Shaping Mathematics */}
             <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: "#22c55e", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-                <span>📐</span> Formulación Matemática del Prior Shaping en Raíz MCTS
+                <span>📐</span> Root Prior Shaping Formulation in MCTS
               </div>
               <div style={{ fontSize: 11, color: "#cbd5e1" }}>
-                En la raíz del árbol MCTS, los logits de política neural \(P(s, a)\) son modulados por la postura y rol doctrinal:
+                At the root of the MCTS tree, neural policy logits P(s, a) are modulated by doctrinal posture and role:
               </div>
               <div style={{ background: "#1e293b", padding: 10, borderRadius: 6 }}>
                 <code style={{ fontSize: 11.5, color: "#86efac", display: "block" }}>
@@ -3166,7 +3423,25 @@ export function NetworkTopologyTab({
                 </code>
               </div>
               <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4 }}>
-                <b>Anulación Autónoma por \(Q(s, a)\):</b> Las 512 simulaciones en el espacio latente retienen la libertad de descartar este sesgo inductivo si el valor esperado acumulado demuestra que otra maniobra produce una recompensa terminal superior.
+                <b>Autonomous Override by Q(s, a):</b> Latent-space MCTS rollouts (512 simulations) retain full authority to override this inductive bias whenever accumulated expected value proves an alternative maneuver yields higher terminal payoff.
+              </div>
+            </div>
+
+            {/* Box C: Multi-Task PCGrad Conflict Surgery */}
+            <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#f43f5e", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
+                <span>⚡</span> Multi-Task PCGrad Conflict Surgery
+              </div>
+              <div style={{ fontSize: 11, color: "#cbd5e1" }}>
+                Projecting conflicting gradients orthogonally during multi-scenario training across all 38 scenarios:
+              </div>
+              <div style={{ background: "#1e293b", padding: 10, borderRadius: 6 }}>
+                <code style={{ fontSize: 11, color: "#fda4af", display: "block" }}>
+                  {`\\text{if } g_i \\cdot g_j < 0: \\quad g_i \\leftarrow g_i - \\frac{g_i \\cdot g_j}{\\|g_j\\|^2} g_j`}
+                </code>
+              </div>
+              <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4 }}>
+                <b>Negative Cosine Elimination:</b> Prevents destructive gradient interference between tactical defense, offensive assault, and auxiliary predictions (threat, attrition, morale) without task interference.
               </div>
             </div>
           </div>
@@ -3174,34 +3449,44 @@ export function NetworkTopologyTab({
           {/* HIERARCHICAL INTEGRATION DIAGRAM & PIPELINE */}
           <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: 14 }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: "#38bdf8", marginBottom: 8, textTransform: "uppercase" }}>
-              Flujo Operacional del Árbol Jerárquico en EfficientZero v2 (3 Capas)
+              Operational Flow of the Hierarchical Architecture in EfficientZero v2 (H-EZ-M v3.0)
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr auto 1fr", alignItems: "center", gap: 10, textAlign: "center" }}>
-              <div style={{ background: "#1e293b", border: "1px solid #a855f7", borderRadius: 6, padding: 12 }}>
-                <div style={{ fontSize: 10, color: "#d8b4fe", fontWeight: 700, textTransform: "uppercase" }}>NIVEL 1: Macro-Estrategia</div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "#f8fafc", marginTop: 2 }}>MacroStrategyPlanner</div>
-                <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
-                  Postura Macro • 8 Roles Canónicos • Mutaciones Contextuales
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr auto 1fr auto 1fr", alignItems: "center", gap: 8, textAlign: "center" }}>
+              <div style={{ background: "#1e293b", border: "1px solid #0ea5e9", borderRadius: 6, padding: 10 }}>
+                <div style={{ fontSize: 10, color: "#7dd3fc", fontWeight: 700, textTransform: "uppercase" }}>TIER 2: Macro-Strategy</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: "#f8fafc", marginTop: 2 }}>Manager Network (H-EZ-M)</div>
+                <div style={{ fontSize: 9.5, color: "#94a3b8", marginTop: 4 }}>
+                  Macro-Goal g_T • 16×16 Heatmap • Multi-Turn Cadence
                 </div>
               </div>
 
-              <div style={{ fontSize: 18, color: "#38bdf8", fontWeight: 900 }}>➔</div>
+              <div style={{ fontSize: 16, color: "#38bdf8", fontWeight: 900 }}>➔</div>
 
-              <div style={{ background: "#1e293b", border: "1px solid #0284c7", borderRadius: 6, padding: 12 }}>
-                <div style={{ fontSize: 10, color: "#7dd3fc", fontWeight: 700, textTransform: "uppercase" }}>PUENTE: Prior Modulation</div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "#f8fafc", marginTop: 2 }}>Shaping P(s, a) (+35% π)</div>
-                <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
-                  Modula priors de política neural en la raíz antes de búsquedas MCTS
+              <div style={{ background: "#1e293b", border: "1px solid #a855f7", borderRadius: 6, padding: 10 }}>
+                <div style={{ fontSize: 10, color: "#d8b4fe", fontWeight: 700, textTransform: "uppercase" }}>TIER 3: Doctrinal Bias</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: "#f8fafc", marginTop: 2 }}>Prior Shaping (+35% π)</div>
+                <div style={{ fontSize: 9.5, color: "#94a3b8", marginTop: 4 }}>
+                  8 Canonical Roles • Contextual Mutations • Hyde Cohesion
                 </div>
               </div>
 
-              <div style={{ fontSize: 18, color: "#38bdf8", fontWeight: 900 }}>➔</div>
+              <div style={{ fontSize: 16, color: "#38bdf8", fontWeight: 900 }}>➔</div>
 
-              <div style={{ background: "#1e293b", border: "1px solid #22c55e", borderRadius: 6, padding: 12 }}>
-                <div style={{ fontSize: 10, color: "#86efac", fontWeight: 700, textTransform: "uppercase" }}>NIVEL 2: Micro-Táctica</div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "#f8fafc", marginTop: 2 }}>MCTS PUCT Search</div>
-                <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
-                  512 Sims • 6 Unroll • Cabezas Auxiliares • Anulación por Q(s, a)
+              <div style={{ background: "#1e293b", border: "1px solid #22c55e", borderRadius: 6, padding: 10 }}>
+                <div style={{ fontSize: 10, color: "#86efac", fontWeight: 700, textTransform: "uppercase" }}>TIER 4: Micro-Tactics</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: "#f8fafc", marginTop: 2 }}>Worker MCTS Search</div>
+                <div style={{ fontSize: 9.5, color: "#94a3b8", marginTop: 4 }}>
+                  512 Sims • Invariant Physics g_θ • Two-Hot Value
+                </div>
+              </div>
+
+              <div style={{ fontSize: 16, color: "#f43f5e", fontWeight: 900 }}>➔</div>
+
+              <div style={{ background: "#1e293b", border: "1px solid #f43f5e", borderRadius: 6, padding: 10 }}>
+                <div style={{ fontSize: 10, color: "#fda4af", fontWeight: 700, textTransform: "uppercase" }}>OPTIMIZER: Surgery</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: "#f8fafc", marginTop: 2 }}>PCGrad Balancer</div>
+                <div style={{ fontSize: 9.5, color: "#94a3b8", marginTop: 4 }}>
+                  Projects Conflicting Gradients Orthogonally
                 </div>
               </div>
             </div>

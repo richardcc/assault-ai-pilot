@@ -19,10 +19,13 @@ export interface CurriculumStepMetric {
   vpNet: number | null;
   capturedAvg: number | null;
   targetWinRate: number | null;
+  targetScore?: number | null;
   targetCapturedAvg: number | null;
   targetVpNet: number | null;
   targetVpTakeRate: number | null;
   vpTakeRate: number | null;
+  doctrineAdherence?: number | null;
+  targetDoctrineAdherence?: number | null;
   tqs: number | null;
   durationSeconds: number | null;
   trainDurationSeconds?: number | null;
@@ -79,10 +82,13 @@ export function extractStepTraceMetrics(trace?: Dict | null): {
   vpNet: number | null;
   capturedAvg: number | null;
   targetWinRate: number | null;
+  targetScore?: number | null;
   targetCapturedAvg: number | null;
   targetVpNet: number | null;
   targetVpTakeRate: number | null;
   vpTakeRate: number | null;
+  doctrineAdherence?: number | null;
+  targetDoctrineAdherence?: number | null;
   tqs: number | null;
 } {
   if (!trace) {
@@ -136,14 +142,14 @@ export function extractStepTraceMetrics(trace?: Dict | null): {
 
   const elo = computeStepAnchorElo(mirrorRand, scSelf);
 
-  // Prefer resolved_non_timeout_win_rate if positive; fall back to aggregate phase score if resolved is 0 but score > 0
+  // Prioritize canonical win_rate from gate_metrics; fallback to resolved win rate or score only if win_rate is missing
   const winRate =
-    typeof gm.resolved_non_timeout_win_rate === "number" && gm.resolved_non_timeout_win_rate > 0
+    typeof gm.win_rate === "number"
+      ? gm.win_rate
+      : typeof gm.resolved_non_timeout_win_rate === "number" && gm.resolved_non_timeout_win_rate > 0
       ? gm.resolved_non_timeout_win_rate
       : typeof gm.score === "number"
       ? gm.score
-      : typeof gm.resolved_non_timeout_win_rate === "number"
-      ? gm.resolved_non_timeout_win_rate
       : null;
 
   const score = typeof gm.score === "number" ? gm.score : null;
@@ -159,10 +165,13 @@ export function extractStepTraceMetrics(trace?: Dict | null): {
       : typeof spec.min_win_rate_vs_heuristic === "number"
       ? spec.min_win_rate_vs_heuristic
       : null;
+  const targetScore = typeof spec.min_score === "number" ? spec.min_score : null;
   const targetCapturedAvg = typeof spec.min_tracked_captured_avg === "number" ? spec.min_tracked_captured_avg : null;
   const targetVpNet = typeof spec.min_vp_net_avg_tracked_side === "number" ? spec.min_vp_net_avg_tracked_side : null;
   const targetVpTakeRate = typeof spec.min_vp_capture_take_rate === "number" ? spec.min_vp_capture_take_rate : null;
   const vpTakeRate = typeof gm.vp_capture_take_rate === "number" ? gm.vp_capture_take_rate : null;
+  const doctrineAdherence = typeof gm.doctrine_adherence_rate === "number" ? gm.doctrine_adherence_rate : null;
+  const targetDoctrineAdherence = typeof spec.min_doctrine_adherence_rate === "number" ? spec.min_doctrine_adherence_rate : null;
   const tqs = typeof gm.tqs === "number" ? gm.tqs : typeof gm.tactical_quality_score === "number" ? gm.tactical_quality_score : null;
 
   return {
@@ -175,10 +184,13 @@ export function extractStepTraceMetrics(trace?: Dict | null): {
     vpNet,
     capturedAvg,
     targetWinRate,
+    targetScore,
     targetCapturedAvg,
     targetVpNet,
     targetVpTakeRate,
     vpTakeRate,
+    doctrineAdherence,
+    targetDoctrineAdherence,
     tqs,
   };
 }
@@ -242,10 +254,13 @@ export function buildCurriculumProgression(
       vpNet: m.vpNet,
       capturedAvg: m.capturedAvg,
       targetWinRate: m.targetWinRate,
+      targetScore: m.targetScore,
       targetCapturedAvg: m.targetCapturedAvg,
       targetVpNet: m.targetVpNet,
       targetVpTakeRate: m.targetVpTakeRate,
       vpTakeRate: m.vpTakeRate,
+      doctrineAdherence: m.doctrineAdherence,
+      targetDoctrineAdherence: m.targetDoctrineAdherence,
       tqs: m.tqs,
       durationSeconds: dur,
       trainDurationSeconds: trainDur,
