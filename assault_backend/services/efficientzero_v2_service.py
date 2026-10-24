@@ -278,9 +278,9 @@ class EfficientZeroV2Service:
 
         # 1. Network direct priors and values
         priors, values = priors_and_values_from_model(
-            model,
-            obs_tensor,
-            legal_actions,
+            model=model,
+            observation=obs_tensor,
+            legal_actions=legal_actions,
             action_dim=action_dim,
         )
         signs = value_signs_from_to_play(obs, legal_actions)
