@@ -63,6 +63,7 @@ function App() {
   const [rosterFilterSide, setRosterFilterSide] = useState<string>("ALL");
   const [rosterStatusFilter, setRosterStatusFilter] = useState<"ALL" | "READY" | "DONE">("ALL");
   const [squadDrawerOpen, setSquadDrawerOpen] = useState(true);
+  const [bottomUnitsOpen, setBottomUnitsOpen] = useState(true);
     const [squadSearchQuery, setSquadSearchQuery] = useState("");
   const [cardPreview, setCardPreview] = useState<{
     unit: Unit;
@@ -129,6 +130,8 @@ function App() {
         setHudVisible((prev) => !prev);
       } else if (e.key === "s" || e.key === "S" || e.key === "a" || e.key === "A") {
         setSquadDrawerOpen((prev) => !prev);
+      } else if (e.key === "u" || e.key === "U") {
+        setBottomUnitsOpen((prev) => !prev);
       
       } else if (e.key === "Escape") {
         if (squadDrawerOpen) {
@@ -860,6 +863,13 @@ function App() {
 
           {/* Drawer trigger buttons */}
           <button
+            className={`ribbon-drawer-btn ${bottomUnitsOpen ? "active" : ""}`}
+            onClick={() => setBottomUnitsOpen((prev) => !prev)}
+            title="Toggle Bottom Units Dock [U]"
+          >
+            🎖️ Units ({panelUnits.length})
+          </button>
+          <button
             className={`ribbon-drawer-btn ${sidebarOpen && activeSidebarTab === "combat" ? "active" : ""}`}
             onClick={() => {
               if (sidebarOpen && activeSidebarTab === "combat") setSidebarOpen(false);
@@ -1325,10 +1335,72 @@ function App() {
           </div>
         </div>
       )}
-      {/* ========================================================
-          BOTTOM HORIZONTAL SQUAD DOCK (ORDER OF BATTLE)
+            {/* ========================================================
+          BOTTOM UNITS DOCK (ORDER OF BATTLE) - DOCKED LIKE ACTIONS
       ======================================================== */}
-      
+      {hudVisible && (
+        <aside
+          className={`bottom-units-dock ${bottomUnitsOpen ? "dock-open" : "dock-collapsed"} ${
+            squadDrawerOpen ? "with-left-drawer" : "full-width"
+          }`}
+        >
+          <div
+            className="bottom-units-header"
+            onClick={() => setBottomUnitsOpen((prev) => !prev)}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "15px" }}>🎖️</span>
+              <span className="bottom-units-header-title">ORDER OF BATTLE / UNITS</span>
+              <span className="roster-header-badge badge-ready">🟢 {readyCount} READY</span>
+              {doneCount > 0 && (
+                <span
+                  className="roster-header-badge badge-done"
+                  style={{
+                    background: "rgba(168, 85, 247, 0.2)",
+                    borderColor: "rgba(168, 85, 247, 0.4)",
+                    color: "#c084fc",
+                  }}
+                >
+                  ✓ {doneCount} DONE
+                </span>
+              )}
+              <span className="left-squad-toggle-count">{panelUnits.length} UNITS</span>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <button
+                className="drawer-close-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBottomUnitsOpen((prev) => !prev);
+                }}
+                title={bottomUnitsOpen ? "Collapse Units Dock [U]" : "Expand Units Dock [U]"}
+                style={{ fontSize: "13px", width: "26px", height: "26px" }}
+              >
+                {bottomUnitsOpen ? "▼" : "▲"}
+              </button>
+            </div>
+          </div>
+
+          {bottomUnitsOpen && (
+            <div className="bottom-units-body">
+              <UnitStatePanel
+                units={panelUnits}
+                activeSide={gameData?.active_side}
+                activatedUnits={gameData?.activated_units || []}
+                selectedUnitId={selectedUnitId}
+                targetUnitId={hoveredTargetId}
+                onSelectUnit={(unit: Unit) => {
+                  setSelectedUnitId(unit.id);
+                  if (typeof (window as any).onUnitClick === "function") {
+                    (window as any).onUnitClick(unit);
+                  }
+                }}
+              />
+            </div>
+          )}
+        </aside>
+      )}
 
     </div>
   );

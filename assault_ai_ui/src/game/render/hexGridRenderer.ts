@@ -150,7 +150,7 @@ export function drawHexGridBase(
   showCoords: boolean,
   hexes: { q: number; r: number; terrain: string }[] = [],
   showMap: boolean,
-  fortifications: { type: string; q: number; r: number; orientation?: number; vertex_start?: number; vertex_end?: number }[] = [],
+  fortifications: { type: string; q: number; r: number; orientation?: number; vertex_start?: number; vertex_end?: number; angle?: number; facing?: number | string }[] = [],
   vps: { q: number; r: number; value?: number; current_owner?: string | null }[] = [],
   showGrid: boolean = true,
 ) {
@@ -163,13 +163,15 @@ export function drawHexGridBase(
   for (const h of hexes) {
     terrainMap.set(h.q * 100 + h.r, h.terrain);
   }
-  const fortificationMap = new Map<number, { type: string; orientation?: number; vertex_start?: number; vertex_end?: number }>();
+  const fortificationMap = new Map<number, { type: string; orientation?: number; vertex_start?: number; vertex_end?: number; angle?: number; facing?: number | string }>();
   for (const item of fortifications) {
     fortificationMap.set(item.q * 100 + item.r, {
       type: item.type,
       orientation: item.orientation,
       vertex_start: item.vertex_start,
       vertex_end: item.vertex_end,
+      angle: (item as any).angle,
+      facing: (item as any).facing,
     });
   }
   const vpMap = new Map<number, { value?: number; current_owner?: string | null }>();
@@ -273,35 +275,59 @@ export function drawHexGridBase(
       if (fort) {
         const fortArt = getFortificationArt(fort.type);
         const renderCfg = getFortificationRender(fort.type);
-        const orientation = fort.orientation;
         const edgeStart = fort.vertex_start;
         const edgeEnd = fort.vertex_end;
-        const edgeRotation = (() => {
-          if (orientation != null && orientation >= 1 && orientation <= 6) {
-            // 1 = North, then clockwise every 60 degrees.
-            return ((orientation - 1) * Math.PI) / 3;
-          }
-          if (edgeStart == null || edgeEnd == null) return 0;
-          // Vertex convention: 1 = North, clockwise.
-          // Rotation baseline: edge 1->2.
-          const a = Math.min(edgeStart, edgeEnd);
-          return ((a - 1) * Math.PI) / 3;
-        })();
-        const edgeAnchorAngle = edgeRotation - Math.PI / 6;
-        // Local edge frame so nudges remain consistent after rotation:
-        // - normal: points from hex center toward fortified edge
-        // - tangent: runs along the fortified edge
-        const nx = Math.cos(edgeAnchorAngle);
-        const ny = Math.sin(edgeAnchorAngle);
-        const tx = -ny;
-        const ty = nx;
 
-        const edgeDx = nx * HEX_SIZE * renderCfg.edgeOffset;
-        const edgeDy = ny * HEX_SIZE * renderCfg.edgeOffset;
-        const nudgeDx = tx * HEX_SIZE * renderCfg.xNudge + nx * HEX_SIZE * renderCfg.yNudge;
-        const nudgeDy = ty * HEX_SIZE * renderCfg.xNudge + ny * HEX_SIZE * renderCfg.yNudge;
-        const drawX = Math.round(px + edgeDx + nudgeDx);
-        const drawY = Math.round(py + edgeDy + nudgeDy);
+        // Angle computation 100% aligned with Scenario & Map Piece Editor:
+        // 0° (North / Top), 60° (NE), 120° (SE), 180° (South / Down), 240° (SW), 300° (NW)
+        const angleDeg = (() => {
+          if (fort.angle != null && !isNaN(Number(fort.angle))) {
+            return Number(fort.angle);
+          }
+          if (fort.facing != null && !isNaN(Number(fort.facing))) {
+            return Number(fort.facing);
+          }
+          if (fort.orientation != null && !isNaN(Number(fort.orientation))) {
+            const o = Number(fort.orientation);
+            // 0-based indexing (0..5) used by scenario editor
+            if (o >= 0 && o <= 5) {
+              return o * 60;
+            }
+            // 1-based legacy indexing (1..6)
+            if (o >= 1 && o <= 6) {
+              return (o - 1) * 60;
+            }
+          }
+          if (edgeStart != null && edgeEnd != null) {
+            const a = Math.min(Number(edgeStart), Number(edgeEnd));
+            return (a - 1) * 60;
+          }
+          return 0;
+        })();
+
+        const angleRad = (angleDeg * Math.PI) / 180;
+
+        // Determine if fortification should be edge-anchored or centered in hex
+        const isEdgeFort = edgeStart != null && edgeEnd != null && renderCfg.edgeOffset > 0;
+
+        let drawX = Math.round(px);
+        let drawY = Math.round(py);
+
+        if (isEdgeFort) {
+          const edgeAnchorAngle = angleRad - Math.PI / 6;
+          const nx = Math.cos(edgeAnchorAngle);
+          const ny = Math.sin(edgeAnchorAngle);
+          const tx = -ny;
+          const ty = nx;
+
+          const edgeDx = nx * HEX_SIZE * renderCfg.edgeOffset;
+          const edgeDy = ny * HEX_SIZE * renderCfg.edgeOffset;
+          const nudgeDx = tx * HEX_SIZE * renderCfg.xNudge + nx * HEX_SIZE * renderCfg.yNudge;
+          const nudgeDy = ty * HEX_SIZE * renderCfg.xNudge + ny * HEX_SIZE * renderCfg.yNudge;
+          drawX = Math.round(px + edgeDx + nudgeDx);
+          drawY = Math.round(py + edgeDy + nudgeDy);
+        }
+
         if (fortArt) {
           const tex = getFortTexture(fortArt);
           if (tex) {
@@ -312,7 +338,7 @@ export function drawHexGridBase(
             sprite.width = HEX_SIZE * renderCfg.scaleX;
             sprite.height = HEX_SIZE * renderCfg.scaleY;
             sprite.alpha = 0.95;
-            sprite.rotation = edgeRotation;
+            sprite.rotation = angleRad;
             sprite.zIndex = 5;
             coordsLayer.addChild(sprite);
           } else {
@@ -345,7 +371,7 @@ export function drawHexGridBase(
                 sprite.width = HEX_SIZE * renderCfg.scaleX;
                 sprite.height = HEX_SIZE * renderCfg.scaleY;
                 sprite.alpha = 0.95;
-                sprite.rotation = edgeRotation;
+                sprite.rotation = angleRad;
                 sprite.zIndex = 5;
                 coordsLayer.addChild(sprite);
                 if (marker) marker.destroy();

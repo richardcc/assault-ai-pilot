@@ -2964,3 +2964,75 @@
   background: rgba(100, 116, 139, 0.08);
   border-radius: 6px;
 }
+
+
+/* ==========================================================================
+   BOTTOM UNITS DOCK (DOCKED ORDER OF BATTLE)
+   ========================================================================== */
+.bottom-units-dock {
+  position: fixed;
+  bottom: 12px;
+  right: 14px;
+  left: 14px;
+  z-index: 51;
+  background: rgba(8, 11, 20, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 240, 255, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: left 0.28s cubic-bezier(0.16, 1, 0.3, 1), max-height 0.25s ease;
+  pointer-events: auto;
+}
+
+.bottom-units-dock.with-left-drawer {
+  left: 408px;
+}
+
+.bottom-units-dock.dock-open {
+  max-height: 235px;
+}
+
+.bottom-units-dock.dock-collapsed {
+  max-height: 40px;
+}
+
+.bottom-units-header {
+  height: 40px;
+  background: rgba(12, 16, 28, 0.98);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.bottom-units-header:hover {
+  background: rgba(16, 22, 38, 0.98);
+}
+
+.bottom-units-header-title {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: var(--neon-cyan);
+}
+
+.bottom-units-body {
+  padding: 8px 12px;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 190px;
+  scrollbar-width: thin;
+}
+
+.bottom-units-body .roster-layout-toolbar {
+  margin-bottom: 6px;
+}
