@@ -30,7 +30,11 @@ from agents.efficientzero_v2.core.observation import (
 )
 from agents.efficientzero_v2.core.selfplay import _action_id_to_index
 from agents.efficientzero_v2.train.train_engine import _channel_name
-from scripts.analyze_channel_attribution import _load_model
+try:
+    from scripts.analyze_channel_attribution import _load_model
+except Exception:
+    def _load_model(run_dir: Path) -> Any:
+        return None
 
 logger = logging.getLogger("assault.explainability")
 

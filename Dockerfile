@@ -22,12 +22,15 @@ RUN pip install --no-cache-dir -r requirements-cloud.txt
 # Copy complete application code, assets, docs, prebuilt frontend dist, and run data
 COPY assault_model/ /app/assault_model/
 COPY assault_backend/ /app/assault_backend/
+COPY assault_bench/ /app/assault_bench/
 COPY assault_rag/ /app/assault_rag/
 COPY agents/ /app/agents/
 COPY mlops/ /app/mlops/
 COPY voec_sim/ /app/voec_sim/
 COPY assets/ /app/assets/
 COPY curriculums/ /app/curriculums/
+COPY scripts/ /app/scripts/
+COPY tools/ /app/tools/
 COPY docs/ /app/docs/
 COPY site/ /app/site/
 # Ensure runtime directories exist (not tracked in git due to large checkpoints)
