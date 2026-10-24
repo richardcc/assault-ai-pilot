@@ -1,9 +1,14 @@
-# 14. Manual de Usuario y Guía de Interfaz del Simulador Táctico (:5173)
+# Manual de Usuario y Guía de Interfaz del Simulador Táctico (:5173)
 
 > **Estado**: Canónico y Actualizado (Octubre 2026 - Versión `v2.5.37`)  
 > **Servicio Frontend**: Simulador Táctico Militar Assault (`assault_ai_ui`) en `http://localhost:5173/`  
 > **Tecnologías Core**: Vite 8 + React 19 + PixiJS 8 + TypeScript + Glassmorphism CSS  
 > **Directiva de Idiomas (Regla 7)**: Interfaz de usuario (UI), código fuente y registros 100% en **Inglés**. Manual de usuario y documentación técnica en **Español**.  
+
+> [!NOTE] Desacoplamiento entre Interfaz HUD y Reglamento Oficial del Wargame
+> Este documento es la guía de usuario del **Frontend del Simulador Táctico (:5173)** (cámara, ribbon, canvas PixiJS, drawer lateral, atajos de teclado y visualización).
+> Para consultar las reglas oficiales del juego de mesa físico (*Sound of Drums rev6*), tablas balísticas, estados de moral, fuego de reacción, asalto y catálogo de unidades, consulta la sección canónica independiente:
+> 👉 [04. Manual de Reglas Oficiales y Mecánicas de Combate (*Sound of Drums rev6*)](02_MODELO_DEL_JUEGO_Y_REGLAS_TACTICAS.md) (`#doc-02`).
 
 ---
 
@@ -209,6 +214,34 @@ flowchart LR
 ```
 
 ### 6.1. Pestaña 🎲: Combate, Dados Tácticos de Gran Formato y Efecto sobre el Blanco (`CombatPanel`)
+
+<div class="img-gallery">
+  <div class="img-card" style="max-width: 130px;">
+    <img src="assets/art/dice/red_00.png" alt="Dado Rojo AT" style="max-height: 70px;" />
+    <div class="img-caption">🔴 Dado Rojo<br>Ataque AT / HE</div>
+  </div>
+  <div class="img-card" style="max-width: 130px;">
+    <img src="assets/art/dice/green_00.png" alt="Dado Verde" style="max-height: 70px;" />
+    <div class="img-caption">🟢 Dado Verde<br>Fusil y Ráfaga</div>
+  </div>
+  <div class="img-card" style="max-width: 130px;">
+    <img src="assets/art/dice/blue_00.png" alt="Dado Azul" style="max-height: 70px;" />
+    <div class="img-caption">🔵 Dado Azul<br>Defensa / Blindaje</div>
+  </div>
+  <div class="img-card" style="max-width: 130px;">
+    <img src="assets/art/dice/yellow_00.png" alt="Dado Amarillo" style="max-height: 70px;" />
+    <div class="img-caption">🟡 Dado Amarillo<br>Mortero / Área</div>
+  </div>
+  <div class="img-card" style="max-width: 130px;">
+    <img src="assets/art/action_markers/firing.png" alt="Fuego" style="max-height: 70px;" />
+    <div class="img-caption">🔥 Orden Fuego<br>firing.png</div>
+  </div>
+  <div class="img-card" style="max-width: 130px;">
+    <img src="assets/art/status/Status Suppressed.png" alt="Suprimido" style="max-height: 70px;" />
+    <div class="img-caption">⚠️ Efecto Supresión<br>Status Suppressed</div>
+  </div>
+</div>
+
 - **Apertura Reactiva Inteligente**: Cuando cualquier unidad (humana o IA) resuelve un ataque, el cajón lateral **se abre automáticamente** en esta pestaña para que el usuario pueda presenciar el intercambio de fuego sin interrumpir la partida.
 - **Dados Balísticos Tácticos de Gran Formato ($44\times 44\text{ px}$)**:
   - Visualización ampliada a más del doble del tamaño original con texturas de alta resolución, bordes luminiscentes por color (Rojo, Amarillo, Verde, Azul) y animación física de giro balístico (`dice-roll`).

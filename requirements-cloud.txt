@@ -1,0 +1,12 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu
+numpy==2.2.6
+pygame==2.6.1
+PyYAML==6.0.2
+duckdb>=1.1.0
+pyarrow>=17.0.0
+orjson>=3.10.0
+safetensors>=0.4.0
+polars>=1.10.0
+scipy>=1.14.0
+pydantic>=2.9.0

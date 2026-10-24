@@ -1,0 +1,32 @@
+# Local virtual environments
+.venv/
+.venv-wsl/
+env/
+venv/
+
+# Git & IDEs
+.git/
+.gitignore
+.vscode/
+.cursor/
+.idea/
+.pytest_cache/
+
+# Python byte-code and temporary caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+.coverage
+htmlcov/
+
+# Heavy legacy archives and temporary scratch
+runs_archive/
+legacy_archive/
+_artifacts/
+scratch/
+tmp/
+*.lock
+
+# Node modules if any in subdirectories
+**/node_modules/

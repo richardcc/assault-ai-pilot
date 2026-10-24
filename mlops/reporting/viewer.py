@@ -249,9 +249,26 @@ def _load_curriculum_traceability_payload(repo_root: Path, limit: int = 120) -> 
             )
 
     for r in rows:
+        # Fallback aliases between schemas
+        if not r.get("recorded_at_utc") and r.get("timestamp_utc"):
+            r["recorded_at_utc"] = r["timestamp_utc"]
+        if not r.get("gate_result_status"):
+            r["gate_result_status"] = "PASS" if r.get("gate_ok") is True else ("FAIL" if r.get("gate_ok") is False else "IN_PROGRESS")
+        if not r.get("gate_metrics") and r.get("metrics"):
+            r["gate_metrics"] = r["metrics"]
+        if not r.get("train_run_id") and r.get("checkpoint_path"):
+            try:
+                cp = Path(r["checkpoint_path"])
+                r["train_run_id"] = cp.parent.parent.name if cp.parent.name == "checkpoints" else cp.stem
+            except Exception:
+                pass
+        if not r.get("phase_started_at") and r.get("recorded_at_utc"):
+            r["phase_started_at"] = r["recorded_at_utc"]
+            r["phase_finished_at"] = r["recorded_at_utc"]
+
         _enrich_trace_timing(r, repo_root)
 
-    rows = sorted(rows, key=lambda r: str((r or {}).get("recorded_at_utc", "")), reverse=True)
+    rows = sorted(rows, key=lambda r: str((r or {}).get("recorded_at_utc", "") or (r or {}).get("timestamp_utc", "")), reverse=True)
     return {
         "schema_version": "curriculum_traceability.v1",
         "status": "ok",
@@ -568,6 +585,9 @@ def serve(
                     return
                 site_root = (repo_root / "site").resolve()
                 if self._send_static_file(site_root / "assets" / rel, site_root):
+                    return
+                repo_assets = (repo_root / "assets").resolve()
+                if repo_assets.exists() and self._send_static_file(repo_assets / rel, repo_assets):
                     return
             if parsed.path.startswith("/art/"):
                 rel = unquote(parsed.path[len("/art/") :])
@@ -1187,8 +1207,8 @@ def serve(
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run curriculum reporting viewer.")
     parser.add_argument("--repo-root", default=".", help="Repository root.")
-    parser.add_argument("--host", default="127.0.0.1", help="HTTP host.")
-    parser.add_argument("--port", default=8777, type=int, help="HTTP port.")
+    parser.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"), help="HTTP host.")
+    parser.add_argument("--port", default=int(os.environ.get("PORT", 8778)), type=int, help="HTTP port.")
     parser.add_argument(
         "--catalog",
         default="runs_curriculum/experiments/reporting/model_catalog_latest.json",

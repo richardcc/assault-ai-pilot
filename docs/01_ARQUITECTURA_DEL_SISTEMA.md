@@ -49,11 +49,98 @@ flowchart TD
 
 ### 2.1. Núcleo del Modelo del Juego (`assault_model/`)
 * **Propósito**: Encapsula las reglas tácticas del juego de guerra sin ninguna dependencia externa de librerías de Machine Learning (sin PyTorch) ni de interfaces gráficas.
-* **Componentes Principales**:
-  * `map/`: Topología hexagonal con coordenadas axiales $(q, r)$, cálculo de distancias Manhattan hexagonal, aristas con características de cobertura, tipos de terreno (bosque, urbano, colina, río) y elevación.
-  * `combat/`: Resolución estocástica mediante dados de batalla (`BattleDie` blancos y negros), perfiles de ataque y defensa, arcos de tiro, línea de visión (`LineOfSight`), fuego de reacción (`ReactionFire`), degradación de moral (`Morale`: Normal, Pinned, Suppressed, Routed) y asaltos cuerpo a cuerpo (`CloseCombat`).
-  * `units/`: Modelado de infantería ligera, infantería pesada, armas de apoyo (HMG, morteros) y vehículos blindados.
-  * `state/`: Transición inmutable de estados de juego (`GameState`), control de iniciativa, turnos y activaciones.
+* **Patrón de Diseño**: Sigue estrictamente el patrón **Estado Inmutable / Runtime de Mutación**:
+
+```mermaid
+graph TD
+    subgraph Core_Engine ["Motor de Reglas assault_model/"]
+        GS["assault_model/state/game_state.py\nGameState (Inmutable / Serializable)"]
+        RT["assault_model/runtime/game_state_runtime.py\nRuntimeGameState (Controlador de Ejecución)"]
+        
+        MAP["assault_model/map/\nHexCoord • HexLine • Terrain • MapPiece"]
+        COMBAT["assault_model/combat/\nRangedCombat • CloseCombat • BattleDie • Morale"]
+        UNITS["assault_model/units/\nUnitInstance • UnitType • CatalogLoader"]
+        REACT["assault_model/runtime/game_state_reactions.py\nReactionFire • ExecutionContext"]
+        
+        RT --> GS
+        RT --> MAP
+        RT --> COMBAT
+        RT --> UNITS
+        RT --> REACT
+    end
+
+    subgraph Neural_Interface ["Interfaz Neuronal voec_sim/"]
+        VOEC["adapter_voec.py\nTensor 32-38 Canales (C, H, W) + Máscaras de Acción"]
+        RT --> VOEC
+    end
+```
+
+#### Responsabilidades de los Paquetes Internos
+1. **`assault_model/state/` (`GameState`, `TurnState`)**:
+   - Contenedor puro de datos serializable en disco o memoria.
+   - Almacena el estado de cada celda (`HexState`), el inventario y posición de cada unidad (`UnitInstance`), el marcador de control (`HexOwnership`, `VPTracker`) y el registro de activación por bando.
+   - **No contiene lógica de cálculo de combate ni reglas de movimiento**.
+
+2. **`assault_model/runtime/` (`RuntimeGameState`, `ExecutionContext`)**:
+   - Orquestador autoritativo del ciclo de simulación.
+   - Gestiona el sistema de activación alternada (I-Go-U-Go o impulso táctico).
+   - Invalida cachés espaciales mediante `_cache_version` tras cualquier mutación del tablero.
+   - Supervisa las interrupciones por fuego de oportunidad (`game_state_reactions.py`).
+
+3. **`assault_model/map/` (`HexCoord`, `HexLine`, `TerrainConfig`)**:
+   - Aritmética hexagonal axial $(q, r)$ y cúbica $(x, y, z)$.
+   - Algoritmo de ray-casting hexagonal para trazado de Línea de Visión (LOS) y detección de obstáculos.
+   - Definición de costes de paso por tipo de terreno y elevación.
+
+4. **`assault_model/combat/` (`RangedCombatResolver`, `CloseCombatResolver`, `BattleDie`, `MoraleState`)**:
+   - Cálculo estocástico de dados de combate (`attack_dice_pool.py`, `defense_dice_pool.py`).
+   - Resolución de impactos directos, impactos morales de supresión y tablas de efectos críticos.
+   - Transiciones de estado de cohesión de tropas (`NORMAL` $\to$ `PINNED` $\to$ `SUPPRESSED` $\to$ `ROUTED`).
+
+#### Ciclo Autoritativo de Mantenimiento del Estado (*State Loop*)
+
+El motor procesa cada acción individual de un agente o jugador humano mediante un ciclo estricto de validación, interrupción y mutación atómica:
+
+```mermaid
+flowchart TD
+    START([Acción Emitida: a_t]) --> VAL{Validar Acción Legal\nvs Máscara de Acciones}
+    
+    VAL -- Ilegal --> ERR[Rechazo de Acción / Penalización]
+    VAL -- Legal --> TYPE{Tipo de Acción}
+
+    TYPE -- Movimiento --> MOVE[1. Calcular Ruta Hexagonal\ny Coste en PA]
+    MOVE --> OP_CHECK{¿Interrupción por Fuego\nde Reacción Enemigo?}
+    
+    OP_CHECK -- Sí --> OP_FIRE[2. Ejecutar Fuego de Oportunidad\nResolver Dados Atk vs Def]
+    OP_FIRE --> OP_RES{¿Unidad Pinned,\nSuppressed o Eliminada?}
+    OP_RES -- Sí --> STOP_MOVE[Movimiento Truncado en Hex Intermedio]
+    OP_RES -- No --> CONT_MOVE[3. Completar Desplazamiento\nhacia Hex Destino]
+    
+    OP_CHECK -- No --> CONT_MOVE
+    
+    TYPE -- Disparo a Distancia --> RANGED[1. Traza LOS HexLine\n2. Determinar Alcance y Modificadores\n3. Tirada de BattleDice Atk vs Def]
+    RANGED --> CASUALTY[4. Aplicar Bajas y Chequeos de Moral]
+    
+    TYPE -- Asalto Cuerpo a Cuerpo --> MELEE[1. Resolver Combate Cercano Simultáneo\n2. Bajas Brutales y Retirada Forzada]
+
+    TYPE -- Pasar / Reorganizar --> RALLY[Chequeo de Moral / Recuperación de Cohesión]
+
+    CONT_MOVE --> MUTATE[Mutación Atómica del GameState]
+    STOP_MOVE --> MUTATE
+    CASUALTY --> MUTATE
+    MELEE --> MUTATE
+    RALLY --> MUTATE
+
+    MUTATE --> POST1[Actualizar Línea de Visión y Niebla: SpottingRuntime]
+    POST1 --> POST2[Actualizar Control de Hexágonos y Puntos de Victoria: VPTracker]
+    POST2 --> POST3[Alternancia de Turno o Nueva Activación: TurnState]
+    POST3 --> POST4[Incrementar _cache_version e Invalidar Cachés]
+    POST4 --> OUTCOME{¿Condición de Fin\nde Partida?}
+    
+    OUTCOME -- Sí --> TERMINAL([Fin de Partida: Victoria / Derrota / Recompensa Final])
+    OUTCOME -- No --> TENSOR[voec_sim: Extraer Tensor Sensorial 32-38 Canales,\nConformado de Recompensas PBRS y Nueva Máscara]
+    TENSOR --> NEXT([Nuevo Estado o_t+1 Listo para MCTS / Red])
+```
 
 ### 2.2. Adaptador de Simulación Rápida (`voec_sim/`)
 * **Propósito**: Actúa como puente de alto rendimiento entre las estructuras de datos de `assault_model` y los tensores requeridos por PyTorch para el entrenamiento.
@@ -234,7 +321,7 @@ flowchart LR
     SITE_MKDOCS["site/\n(Portal MkDocs Material :8778/docs/)"]
 
     MD_SRC --> SYNC_SCRIPT
-    SYNC_SCRIPT -->|Inyección JSON + Assert 100%| HTML_STANDALONE
+    SYNC_SCRIPT -->|"Inyección JSON + Assert 100%"| HTML_STANDALONE
     SYNC_SCRIPT -->|mkdocs build| SITE_MKDOCS
 ```
 

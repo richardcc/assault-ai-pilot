@@ -142,6 +142,14 @@ flowchart TD
      5. **Corrección Histórica de OOB en Desembarco**: Asignar defensores italianos de la XVIII Brigata Costiera en Mettete en lugar de tropas pesadas alemanas con MG42.
    - **Criterio de Aceptación Cuantitativo**: El atacante dispone de superioridad 2:1 en masa de maniobra, 3 re-rolls de ablandamiento y victoria anticipada por colapso moral enemigo. Eliminación de la inercia defensiva aprendida en autojuego, alcanzando $\ge 80\%$ de ratio de asaltos a VPs.
 
+7. **Subtarea 3.5.7: Ingesta CanÃ³nica de Escenarios de InfanterÃ­a Pura (Bunker Hill! y Elemento Sorpresa)** â [CONSOLIDADA ð¢ v3.0.0]:
+   - **MÃ³dulos**: ssets/scenarios/bunker_hill_singolo.json, ssets/scenarios/elemento_sorpresa_singolo.json, ssets/catalogs/map_piece_catalog.json, ssault_model/tests/test_pure_infantry_scenarios.py.
+   - **Alcance Operativo**:
+     1. **Bunker Hill! (unker_hill_singolo.json, PÃ¡g. 81)**: Sector de asalto en colina con 4 casamatas de hormigÃ³n y estaciÃ³n de radio (4,3), enfrentando infanterÃ­a del 16.Âº Regimiento US vs defensores de la Div. Livorno sin presencia de vehÃ­culos.
+     2. **Elemento Sorpresa (elemento_sorpresa_singolo.json, PÃ¡gs. 86-87)**: Cruce en Y de Priolo en pieza S3 con elevaciÃ³n de colina, 5 paracaidistas del 505.Âº PIR (HMG 0.30 y francotirador) asaltando posiciones fortificadas italianas con caÃ±Ã³n AA Breda 20mm y morteros Brixia.
+     3. **Elevaciones en CatÃ¡logo de Piezas**: AsignaciÃ³n de elevaciÃ³n elevation: 1 a la cresta de colina de la pieza S6 ((3,2), (4,3), (4,4), (5,2), (5,3)).
+   - **Criterio de AceptaciÃ³n Cuantitativo Cumplido**: Carga y ejecuciÃ³n autoritativa en VOECSimulator, generaciÃ³n de acciones legales, anÃ¡lisis topogrÃ¡fico IPB clasificando hexÃ¡gonos objetivo como terreno clave y 100% de tests en verde en 	est_pure_infantry_scenarios.py.
+
 ---
 
 ## 5. Tarea 3.6: Eliminación de la Parálisis Ofensiva y Colapso de la Brecha Asimétrica (P0 - Crítica) [CONSOLIDADA 🟢]
@@ -175,3 +183,50 @@ flowchart TD
 - **Asymmetry Gap Global**: Reducción drástica de **0.655 a $\le 0.15$**.
 - **Recuperación de ELO Ancla**: $\ge 1600$ ELO verificado en evaluación bilateral de 100 partidas.
 - **Tactical Quality Score (TQS)**: $\ge 85.0 / 100$ con estatus de puerta **PASS**.
+
+
+---
+
+## 6. Tarea 3.7: Modernización y Optimización Integral del Motor de Simulación (P1 - Alta)
+
+> **Módulos Involucrados**: `assault_model/state/`, `assault_model/rules/`, `assault_model/combat/line_of_sight.py`, `voec_sim/core/simulator.py`, `assault_sim/`.  
+> **Diagnóstico Empírico de Auditoría**: En 100 pasos de simulación (`battaglia_cittadina_2_1`), el motor realiza 3.68 millones de operaciones con una tasa base de 109 pasos/segundo. El 51% del tiempo de CPU se consume en `ActionCatalog.actions`, 22% en `update_spotting` (36,432 llamadas a LOS), 21% en la regeneración redundante de `spatial_features()` y se registran más de 1.08 millones de llamadas a `getattr`/`hasattr`.  
+> **Directiva Primaria**: **Cero invención de mecánicas; 100% de apego al reglamento oficial de Sound of Drums rev6 (52 páginas)**.
+
+### Subtareas y Plan de Acción en 4 Fases
+
+1. **Subtarea 3.7.1: Aceleración de Rendimiento Inmediata del Motor [CONSOLIDADO 🟢 v2.5.29]**:
+   - **Resultado Empírico**: Throughput de simulación incrementado de 428.8 a **719.7 pasos/s (+67.8%)** en acciones aleatorias y de 454.3 a **844.6 pasos/s (+86.0%)** en secuencia canónica.
+   - **Intervenciones Realizadas**:
+     - Cacheo inmutable de `_static_spatial_features` gobernado por `terrain_signature` en `VOECSimulator`, ahorrando 21% de tiempo de CPU por step.
+     - Índices de ocupación O(1) por `state_version` en `MovementRules.get_legal_paths`, suprimiendo la reconstrucción local de listas.
+     - Snapshot táctico reactivo y bypass de unidades `HIDDEN` en `update_spotting`.
+     - Búsqueda O(1) de rasgos mediante `_trait_set` precompilado en `UnitType.has_trait`.
+     - Filtrado temprano por avistamiento conjunto (`all_spotted`) en `ActionCatalog._ranged_fire_actions`.
+   - **Certificación de Calidad**: 160/160 tests en motor (`assault_model` + `voec_sim`), 158/158 en `agents/efficientzero_v2` y 77/77 en `assault_bench` en verde estricto.
+
+2. **Subtarea 3.7.2: Purga de Deuda Técnica y Descomisionamiento Legacy [CONSOLIDADO 🟢 v2.5.30]**:
+   - **Unificación Canónica de Assets**: Erradicada la carpeta sombra `assault_sim/assets/`, fijando `assets/` (`assets/catalogs/`, `assets/scenarios/`, `assets/art/`) como la única fuente de verdad autoritativa del proyecto.
+   - **Archivado de Pila Obsoleta PPO/SB3**: Trasladados scripts y binarios obsoletos (`assault_sim/train/`, `assault_sim/checkpoints/`, `grid_search_shaped.py`, `run_train_short.py`, `run_eval_short.py`, `run_eval_200.py`) al directorio `legacy_archive/`.
+   - **Desacoplamiento de APIs**: Actualizado `mlops/reporting/replay_api.py` para resolver escenarios directamente desde la ruta canónica.
+   - **Certificación de Suite**: Verificado el 100% de tests en verde en motor (160/160), EZv2 (158/158), backend (29/29) y benchmark (77/77).
+   - Descomisionar la pila heredada de PPO/SB3 en `assault_sim/` (`training_env.py`, `sim_env.py`, `ppo_config.py`, checkpoints obsoletos).
+   - Unificar `assets/scenarios/` y `assets/catalogs/` como fuente única de verdad, eliminando réplicas secundarias desincronizadas.
+
+3. **Subtarea 3.7.3: Refactorización Canónica de Línea de Visión (Cube Coordinates Hex Math) [CONSOLIDADO 🟢 v2.5.52]**:
+   - Migrado el cálculo de LOS desde interpolación flotante con píxeles UI (`_UI_HEX_SIZE = 30.0`) hacia raycasting exacto analítico en coordenadas cúbicas $(x, y, z)$ donde $x + y + z = 0$.
+   - Resolución matemática exacta y determinista de aristas divisorias (*hex spines*) conforme a las Reglas 10.2 y 10.3 del reglamento oficial (*Sound of Drums rev6*): cuando la visual discurre por una costura entre hexágonos, si ambos bloquean la LOS queda bloqueada; si uno bloquea y otro dificulta es dificultada; y si cualquiera de los lados es despejado la visual se considera despejada ("el tirador ve a lo largo de la costura").
+   - Reversibilidad espacial $100\%$ determinista garantizada entre origen y destino mediante ordenación canónica de pares $\{A, B\}$.
+   - Erradicación definitiva de las constantes de dibujo 2D (`_UI_HEX_SIZE`, `_EDGE_EPS_SQ`) del núcleo táctico de reglas de combate.
+   - Suite de verificación matemática exhaustiva en `assault_model/tests/test_vectorized_los_pathfinder_and_cow.py` (124/124 tests de motor en verde).
+
+4. **Subtarea 3.7.4: Persistencia Resiliente y Tolerancia a Fallos en Artefactos de Evaluación de Benchmarks [CONSOLIDADO 🟢 v2.5.53]**:
+   - Protección integral en `assault_bench/bench_io.py` contra fallos de I/O de disco (`FileNotFoundError`, permisos o carreras de borrado) durante la serialización de episodios de repetición (`bench_replay_episodes/episode_XXXX.json`) y resúmenes XAI (`bench_replay_index_latest.json`).
+   - Creación defensiva y atómica de directorios contenedores (`target_path.parent.mkdir(parents=True, exist_ok=True)`) y captura no bloqueante de excepciones secundarias para garantizar que una ejecución curricular multietapa de varias horas jamás se aborte por la escritura de archivos de repetición optativos.
+   - Suite de 77/77 tests pasando en verde en `assault_bench/tests/`.
+   - Suite de pruebas unitarias 124/124 en verde (`test_section_6_1_canonical_cube_ray_properties_and_symmetry`, `test_section_6_1_rule_10_3_hex_side_exact_resolution`).
+
+4. **Subtarea 3.7.4: Consolidación Normativa Fiel al Reglamento Oficial**:
+   - Ciclo de vida canónico de humo (Regla 7.2): Dispersión progresiva y bloqueo de LOS durante 2 turnos.
+   - Sistema de transporte y remolque (Regla 9.11): Capacidad de embarque/desembarque en semiorugas/camiones y remolque de piezas de artillería inmovilizadas.
+   - Mazo de mando y tirada de iniciativa D6 con puntos CP (Reglas 4.9 y 6.1).

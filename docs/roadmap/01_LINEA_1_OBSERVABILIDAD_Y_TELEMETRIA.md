@@ -26,6 +26,8 @@ flowchart LR
 | **2** | **1.2 Profiling y Reducción de Sobrecarga de Sondas en Bucle Caliente** | **P0** | `assault_model/state/game_state.py`, `agents/efficientzero_v2/core/mcts.py`, `agents/efficientzero_v2/core/selfplay.py`, `mlops/telemetry/` | Profiler de microsegundos ($\mu\text{s}$) zero-mock (`ProbeProfiler`). Sondas espaciales desacopladas y perezosas (`LazyProbeSnapshot`), memoización de daño esperado en paso y acceso $O(1)$ a puntuación MCTS. Sobrecarga en bucle caliente reducida a $0.6657\%$ ($< 1.50\%$ presupuestado) con cero pérdida de fidelidad ni granularidad. **[CONSOLIDADO 🟢]** | Tarea 1.1 |
 | **3** | **1.3 Validador E2E de Trazabilidad Frontend $\leftrightarrow$ DuckDB** | **P1** | `assault_ai_ui/src/tests/traceability.spec.ts`, `mlops/reporting/replay_api.py`, `mlops/tests/test_frontend_duckdb_traceability.py` | Test automatizado que audita cada pestaña del dashboard comprobando que ningún componente muestre datos inventados y que los valores se originen en columnas reales de Parquet/DuckDB o muestren `-`/`N/A`. **[CONSOLIDADO 🟢 v2.5.8]** | Tarea 1.1 |
 | **4** | **1.4 Catálogo Unificado de Esquemas y Depuración de Redundancias** | **P1** | `docs/13_INVENTARIO_CANONICO_METRICAS.md`, `mlops/dataset_builder.py`, `mlops/tests/test_unified_catalog_and_schema_purge.py` | Purgar esquemas Parquet históricos obsoletos (`v1_legacy`), consolidando campos equivalentes bajo una única nomenclatura canónica indexada en DuckDB. Eliminación de campos acumuladores volátiles en `decisions_top.parquet` (unificación al 100% en 15 columnas canónicas) y Clean Break total con etiquetas legacy en catálogo y DuckDB. **[CONSOLIDADO 🟢 v2.5.9]** | Tarea 1.2 |
+| **5** | **1.5 Protocolo de Estabilidad Operativa, Safety Gate de Almacenamiento y Compresión de Replays XAI** | **P0** | `docs/15_CURRICULUMS_Y_ENTRENAMIENTO_PROGRESSIVO.md`, `assault_bench/bench_io.py`, `curriculums/common/run_dynamic_gated_curriculum.ps1` | Safety gate pre-flight (30 GB libres), compresión compacta y eliminación de colapsos de memoria RAM y desbordamientos de disco. **[CONSOLIDADO 🟢 v2.5.25]** | Tarea 1.4 |
+| **6** | **1.6 Empaquetado y Publicación en la Nube Gratuita (Hugging Face Spaces)** | **P1** | `Dockerfile`, `requirements-cloud.txt`, `README.md`, `docs/18_DESPLIEGUE_NUBE_GRATUITA.md` | Publicación de la aplicación completa con frontend React compilado, base DuckDB, replays y catálogo en un contenedor Docker ligero (<350 MB) con 16 GB de RAM y URL pública permanente gratuita. **[CONSOLIDADO 🟢 v2.5.27]** | Tarea 1.5 |
 
 ---
 
@@ -70,4 +72,13 @@ flowchart LR
   - **Parada Segura de Procesos Residuales**: Detección y terminación completa de subprocesos zombi/huérfanos de currículum y entrenamiento en segundo plano (`train_efficientzero_v2`), reduciendo la utilización de RAM del 95% al 43.5%.
   - **Safety Gate de Almacenamiento Pre-flight**: Formalización del umbral mínimo de 30 GB libres en `C:\` previo a cualquier ejecución para abortar limpiamente antes de provocar fallos en cascada del sistema operativo.
   - **Directiva de Compresión y Poda**: Supresión obligatoria de `indent=2` en serialización de replays benchmark (~45% de ahorro inmediato), soporte de compresión `.zst` / `.json.gz` (reducción del 95% a <4 MB por archivo) y política de retención selectiva de episodios en fases curriculares intermedias.
+
+### Tarea 1.6 Empaquetado y Publicación en la Nube Gratuita Consolidada 🟢 v2.5.27
+- **Módulos**: `Dockerfile`, `.dockerignore`, `requirements-cloud.txt`, `README.md`, `mlops/reporting/viewer.py`, `docs/18_DESPLIEGUE_NUBE_GRATUITA.md`.
+- **Logros y Cobertura Verificada**:
+  - **Empaquetado Completo sin Deuda Técnica**: Contenedor Docker basado en `python:3.12-slim` con dependencias CPU-only de PyTorch (<180 MB) reduciendo la imagen a <350 MB para despliegue instantáneo sin coste.
+  - **Inclusión Integral de la Plataforma**: Incluye el 100% de la aplicación existente (Frontend React Vite compilado, base DuckDB de 14 MB con todas las fases curriculares, replays de partidas, catálogo de modelos y los 26 módulos de documentación técnica).
+  - **Compatibilidad Nativa con Hugging Face Spaces (Free Tier)**: Configurado para 16 GB de RAM, 2 vCPUs y 50 GB de almacenamiento persistente con frontmatter Docker en `README.md` y usuario no-root UID 1000.
+  - **Detección Automática de Host y Puerto**: `viewer.py` parametrizado con lectura de `HOST` y `PORT` del entorno, permitiendo ejecución inmediata en puerto 7860 (Hugging Face) o dinámico (Render).
+
 

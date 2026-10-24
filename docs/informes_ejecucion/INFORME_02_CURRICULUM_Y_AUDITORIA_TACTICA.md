@@ -119,9 +119,9 @@ $$\text{Oportunidades de Avance} \xrightarrow{\text{Iniciativa}} \text{Acciones 
 ```mermaid
 graph TD
     subgraph EmbudoEVAL34 ["Embudo Canónico Estandarizado (EVAL 34)"]
-        O2["5,784 Pasos Elegibles de Avance a VP"] -->|Tasa de Ruptura: 1.02%| P2["59 Acciones de Ruptura sobre Zona Brecha"]
-        P2 -->|Tasa de Conversión: 100.0%| C2["59 Capturas Físicas de VP"]
-        O2 -.->|Aversión / Parálisis: 98.98%| S2["5,725 Maniobras Conservadoras / Stalls"]
+        O2["5,784 Pasos Elegibles de Avance a VP"] -->|"Tasa de Ruptura: 1.02%"| P2["59 Acciones de Ruptura sobre Zona Brecha"]
+        P2 -->|"Tasa de Conversión: 100.0%"| C2["59 Capturas Físicas de VP"]
+        O2 -.->|"Aversión / Parálisis: 98.98%"| S2["5,725 Maniobras Conservadoras / Stalls"]
     end
 ```
 

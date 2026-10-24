@@ -506,3 +506,257 @@ Antes de iniciar cualquier ciclo o fase en los scripts de orquestación (`run_dy
 * Se dispone de una utilidad de mantenimiento para purgar directorios `bench_replay_episodes` de ejecuciones históricas obsoletas, liberando más de **100 GB** de manera inmediata en la máquina de desarrollo sin alterar el linaje de pesos `.pt` ni la telemetría histórica de DuckDB.
 
 
+
+
+---
+
+## 10. Currículum Jerárquico Multitarea (H-EZ-M): La Nueva Doctrina de Entrenamiento (Era v3.0)
+
+> [!IMPORTANT]
+> **EL NUEVO PARADIGMA DE ENTRENAMIENTO CURRICULAR (ERA v3.0)**  
+> En la era anterior (v2.x), los currículums intentaban enseñar simultáneamente la micro-cinemática de cada soldado y la macro-estrategia de victoria a una sola red plana a lo largo de 170 micro-pasos. Este enfoque provocaba *Precipicios Curriculares* (*Curriculum Cliffs*) y *Olvido Catastrófico* al transicionar entre mapas abiertos y urbanos.  
+> La arquitectura **Hierarchical Multi-Task EfficientZero (H-EZ-M)** revoluciona el entrenamiento dividiendo el currículum en **dos pistas de aprendizaje concurrentes**: la pista táctica universal del Operador (*Worker*) y la pista estratégica multitarea del Comandante (*Manager*).
+
+```mermaid
+flowchart TD
+    classDef worker fill:#1e293b,stroke:#38bdf8,stroke-width:2px,color:#ffffff;
+    classDef manager fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#ffffff;
+    classDef multi fill:#451a03,stroke:#f59e0b,stroke-width:2px,color:#ffffff;
+
+    subgraph TrackWorker ["PISTA 1: Entrenamiento Cinemático Universal (Worker)"]
+        W1["Fase W1: Movimiento en Desenfilada y Cobertura"]:::worker
+        W2["Fase W2: Despliegue de Humo y Fuego de Cobertura"]:::worker
+        W3["Fase W3: Penetración en Brecha y Asalto CQC"]:::worker
+        W1 --> W2 --> W3
+    end
+
+    subgraph TrackManager ["PISTA 2: Entrenamiento Estratégico Multitarea (Manager)"]
+        M1["Nivel M1: Macro-Metas Directas (1 VP / Infantería 11.1)"]:::manager
+        M2["Nivel M2: Asignación Combinada (Base of Fire + Asalto Urbano)"]:::manager
+        M3["Nivel M3: Teatros Completos y Reservas (Gela + Mettete)"]:::manager
+        M1 --> M2 --> M3
+    end
+
+    subgraph MultitaskEngine ["MOTOR DE GENERALIZACIÓN MULTITAREA (EZ-M)"]
+        MT1["MultiTaskReplayBuffer (Muestreo Estratificado)"]:::multi
+        MT2["Multi-Task PCGrad (Proyección Ortogonal de Gradientes)"]:::multi
+        MT3["FiLMLayer (Inyección de Metas Zero-Init)"]:::multi
+    end
+
+    TrackWorker -->|"Física Universal Invariante g_θ"| MultitaskEngine
+    TrackManager -->|"Distribución de Metas g_T"| MultitaskEngine
+    MultitaskEngine -->|"Generalización en los 38 Escenarios"| AgentV3["Agente Canónico H-EZ-M v3.0"]
+```
+
+---
+
+### 10.1. El Fin del Dilema: Currículum Secuencial vs. Currículum Jerárquico Multitarea
+
+El currículum tradicional operaba de forma rígidamente secuencial:
+$$	ext{Fase 1 (Sprint 3 hex)} 	o 	ext{Fase 2 (Defendida)} 	o 	ext{Fase 3 (Carrera 2v2)} 	o 	ext{Fase 4 (Sandbox 11.1)} 	o 	ext{Fase 5 (Gela)} 	o 	ext{Fase 6 (Urbana)}$$
+
+Este esquema sufría dos fallos estructurales:
+1. **Disonancia Topográfica:** Al llegar a la Fase 6 (`battaglia_cittadina_2_1`), los gradientes de castigo por bajas en calles estrechas destruían las conductas ofensivas aprendidas en el sprint abierto de la Fase 1.
+2. **Confusión de Escala:** El agente intentaba aprender a la vez cómo disparar un fusil Breda y cómo coordinar una pinza operacional a 12 turnos vista.
+
+En el **Currículum H-EZ-M**, estos dos aprendizajes se desacoplan:
+* **El Operador Táctico (*Worker*):** Aprende una **física de combate universal e invariante** ($g_	heta$). El coste en PAs de cruzar un seto, la línea de visión (LOS), las tablas de dados de combate y la moral no cambian según el escenario. Una vez que el Worker aprende a avanzar bajo cobertura y usar humo, esa destreza es transferible al 100% a cualquiera de los 38 escenarios oficiales.
+* **El Comandante Estratégico (*Manager*):** Aprende **estrategia militar pura**. Nunca mueve fichas individuales; emite vectores de meta $g_T = (\mathbf{M}_{	ext{target}}, \mathbf{p}_{	ext{mode}})$ cada turno ($T \le 8$). Y lo hace entrenando **simultáneamente sobre múltiples escenarios** gracias a la infraestructura EZ-M.
+
+---
+
+### 10.2. El Rol Crítico de EZ-M (arXiv:2603.01452) en la Definición del Currículum
+
+La arquitectura **EZ-M** no es un componente opcional: es el **engranaje matemático que hace viable el currículum jerárquico**:
+
+1. **Inyección de Metas vía `FiLMLayer` (Zero-Init Identity Preservation):**
+   - El Worker no necesita redes separadas para cada misión. La capa FiLM (`agents/efficientzero_v2/core/task_conditioning.py`) modula sus características latentes:
+     $$\mathbf{z}_{	ext{mod}} = (1 + oldsymbol{\gamma}(g_T)) \odot \mathbf{z} + oldsymbol{eta}(g_T)$$
+   - Si el Manager le ordena `[ASSAULT, HEX_4_5]`, el Worker reorienta su búsqueda MCTS hacia ese hexágono sin alterar su conocimiento de balística ni de supervivencia.
+2. **Muestreo Estratificado con `MultiTaskReplayBuffer`:**
+   - Durante las fases avanzadas del currículum, el búfer retiene experiencias de múltiples teatros:
+     $$P(	ext{muestra}) = 0.35 	imes 	ext{Urbano (Battaglia)} + 0.35 	imes 	ext{Playa (Mettete)} + 0.30 	imes 	ext{Sandbox (11.1)}$$
+   - El Comandante aprende de forma equilibrada a manejar diferentes densidades de terreno sin olvidar ninguno.
+3. **Cirugía de Gradientes con `multi_task_pcgrad_backward`:**
+   - Si la optimización en un mapa urbano empuja al Comandante a ser conservador ($\mathbf{g}_{	ext{urbano}}$) mientras que en el desembarco se requiere avance rápido ($\mathbf{g}_{	ext{playa}}$) con $\mathbf{g}_{	ext{urbano}} \cdot \mathbf{g}_{	ext{playa}} < 0$, el algoritmo proyecta el gradiente ortogonalmente:
+     $$\mathbf{g}_i^{	ext{proj}} = \mathbf{g}_i - rac{\mathbf{g}_i \cdot \mathbf{g}_j}{\|\mathbf{g}_j\|^2} \mathbf{g}_j$$
+   - Esto erradica la interferencia destructiva de gradientes y permite que una misma red Comandante gobierne simultáneamente escenarios disonantes.
+
+---
+
+### 10.3. Matriz de Progresión Curricular H-EZ-M (4 Fases Canónicas)
+
+| Fase Curricular | Nivel de Jerarquía | Escenarios de Entrenamiento | Objetivos de Aprendizaje | Quality Gate de Promoción |
+| :---: | :--- | :--- | :--- | :--- |
+| **Fase 1: Destreza Táctica Universal (Worker)** | Nivel Bajo (Worker MCTS $k \le 3$) | Sandboxes sintéticos ($8	imes 8$): Sprint a cobertura, cruce de killzone con humo y asalto CQC a nido fortificado. | Movimiento por corredores de desenfilada, timing de lanzamiento de humo y asalto con granadas sin fuego suicida. | Tasa de supervivencia $\ge 85\%$ en aproximación y éxito en asalto CQC $\ge 80\%$. |
+| **Fase 2: Asignación Táctica Simétrica (Manager)** | Nivel Alto (Manager $T \le 8$) sobre Worker consolidado | `addestramento_fanteria_11_1` (Infantería pura 3v3 simétrica, 1 VP disputado en pieza S6). | Asignación de roles (`SPEARHEAD` vs `FIRE_SUPPORT`), fijación de Base de Fuego en cota elevada y concentración de asalto en Turno 3-4. | Win Rate $\ge 80\%$ vs Random Side A y Side B; capturas de VP $\ge 75\%$. |
+| **Fase 3: Campaña Táctica Asimétrica Multitarea** | Co-entrenamiento Manager + Worker con EZ-M | `battaglia_cittadina_2_1` (Urbano 2:1) + `mettete_i_piedi_terra_1` (Desembarco con alambradas) vía `MultiTaskReplayBuffer`. | Apertura de brechas con zapadores (`BANGALORE`, `SMOKE`), supresión de casamatas y asalto coordinado en brecha sin parálisis ofensiva. | Win Rate $\ge 75\%$ como atacante en ambos mapas; Asymmetry Gap $\le 0.15$. |
+| **Fase 4: Maestría Operacional y Teatros Masivos** | Agente Canónico H-EZ-M Completo | Escenario 10.0 Canónico (Gela) y tableros extendidos $32	imes 32$. | Gestión de refuerzos de 2.ª oleada en T2, empleo de apoyo fuera de mapa (TAS/OAS) y división del teatro en macro-sectores operacionales. | Win Rate $\ge 75\%$ vs bot heurístico en $<15$ turnos; cero regresión en escenarios previos. |
+
+---
+
+### 10.4. Observabilidad Curricular H-EZ-M en Dashboard MLOps (:8778)
+
+Con la adopción de H-EZ-M, el visualizador forense de replays y el monitor curricular de MLOps incorporan tres nuevas capas de telemetría en tiempo real:
+1. **Línea de Intención Estratégica (*Command Objective Vector*):** Flecha operacional vectorial sobre el canvas hexagonal PixiJS indicando la macro-meta $g_T$ del Comandante en cada turno.
+2. **Cumplimiento de Meta Local (*Worker Intrinsic Reward Gauge*):** Indicador radial de fidelidad que mide si las micro-acciones del Worker se alinean con la dirección ordenada por el Manager ($r_{	ext{intrinsic}} = \cos(\Delta h, g_T)$).
+3. **Matriz de Conflicto Inter-Escenario (*PCGrad Conflict Matrix*):** Visualizador de calor en el Model Catalog que monitoriza la similitud coseno entre gradientes de escenarios (`mean_task_cosine_sim`), alertando tempranamente si dos mapas entran en disonancia doctrinal.
+
+
+---
+
+## 11. Motor de Orquestación Curricular con Prefect 3.x (Era v3.0)
+
+> [!IMPORTANT] DESCOMISIONAMIENTO DEFINITIVO DE POWERSHELL (.ps1)
+> En la Era `v3.0.0`, el motor de ejecución curricular ha sido migrado al 100% hacia Python nativo mediante **Prefect 3.9+**. Se erradican por completo más de 1.100 líneas de scripts frágiles en PowerShell (`run_dynamic_gated_curriculum.ps1`, `run_all_phases.ps1`), centralizando toda la lógica de validación, reintentos y Quality Gates en código tipado, asíncrono y reproducible.
+
+```mermaid
+flowchart TD
+    subgraph PrefectEngine ["Motor de Orquestación Nativo (curriculums/orchestration/)"]
+        FlowPipe["Assault Curriculum Pipeline<br/><b>curriculum_flow.py</b>"] --> FlowPhase["Curriculum Phase Flow<br/><b>phase_flow.py</b>"]
+        FlowPhase --> T0["@task: check_system_health<br/><i>safety.py (Disco >= 10GB, VRAM)</i>"]
+        FlowPhase --> T1["@task: generate_cycle_overlay<br/><i>mutation.py (Adaptación evolutiva)</i>"]
+        FlowPhase --> T2["@task: run_training_step<br/><i>training.py (trainer.py + ckpt)</i>"]
+        FlowPhase --> T3["@task: run_benchmark_evaluation<br/><i>evaluation.py (assault_bench)</i>"]
+        FlowPhase --> T4["@task: evaluate_quality_gate<br/><i>gate.py (Pydantic GateSpec)</i>"]
+        T4 -->|Gate Superado| Prom["Promoción Checkpoint Ganador"]
+        T4 -->|Gate Unmet (Ciclo < Max)| T1
+        FlowPhase --> T5["@task: record_cycle_trace<br/><i>telemetry.py (DuckDB + JSONL)</i>"]
+    end
+
+    subgraph Observabilidad ["Doble Observabilidad Operativa"]
+        FlowPipe -.-> UI4200["Panel Local Prefect (:4200)<br/><i>Estados de tareas, reintentos y logs</i>"]
+        T5 -.-> DuckDB["DuckDB & Dashboard MLOps (:8778)<br/><i>Replays forenses, VPs y linaje</i>"]
+    end
+```
+
+### 11.1. Estructura Modular del Paquete `curriculums/orchestration/`
+
+El orquestador reside íntegramente en Python dentro de `curriculums/orchestration/`:
+
+1. **Modelos Pydantic (`models.py`):**
+   - `GateSpec`: Reglas tipadas de Quality Gate (`min_win_rate`, `max_loss_rate`, `min_score`, `min_vp_capture_take_rate`, `min_tracked_captured_avg`, `no_regression_defeat_rate`, etc.).
+   - `PhaseSpec`: Especificación de fase con configuración de entrenamiento, benchmark, presupuesto de reintentos y gate.
+   - `CurriculumSpec`: Definición global del currículum (fases, motor, metadatos).
+   - `GateMetrics` y `GateEvaluation`: Métricas agregadas y veredicto booleano con lista detallada de motivos de fallo.
+   - `CycleResult`, `PhaseSummary`, `CurriculumSummary`: Objetos de resultado y linaje histórico.
+
+2. **Tareas Atómicas Prefect (`tasks/`):**
+   - `safety.py`: Chequeo de espacio en disco (mínimo 10 GB) y VRAM GPU NVIDIA RTX 4060 con vaciado de caché CUDA y recolección de basura.
+   - `training.py`: Subproceso de entrenamiento (`trainer.py`), streaming de logs hacia `runs_curriculum/logs/` y resolución del último checkpoint generado.
+   - `evaluation.py`: Subproceso de benchmark (`assault_bench/benchmark.py`), ingesta y resolución de `bench_eval_*.json`.
+   - `gate.py`: Evaluación matemática determinista contra `GateSpec` ponderada por episodios sobre resultados MCTS.
+   - `mutation.py`: Generación dinámica de overlays YAML (`resume_checkpoint`, ajuste de `reward_shaping`, `objective_loss_weight`, `reanalysis_ratio` y temperatura MCTS si el gate no se supera).
+   - `telemetry.py`: Escritura de trazas JSONL (`curriculum_phase_traceability.jsonl`), snapshot `.latest.json` y refresco automático de catálogos Parquet y DuckDB para el Dashboard MLOps.
+
+3. **Flujos Prefect (`flows/`):**
+   - `phase_flow.py` (`execute_phase_flow`): Bucle dinámico independiente por fase (`max_reinforcement_cycles`) que parte siempre del checkpoint base consolidado de la fase anterior.
+   - `curriculum_flow.py` (`execute_curriculum_flow`): Orquestador maestro de la campaña que encadena los checkpoints dorados entre fases.
+
+4. **CLI Runner y Servidor Local:**
+   - `runner.py`: Punto de entrada CLI:
+     ```bash
+     python -m curriculums.orchestration.runner --curriculum curriculums/vp_acceleration/curriculum.yaml --start-phase phase1 --dry-run
+     ```
+   - `scripts/start_prefect.bat`: Script de arranque del panel web local en `http://127.0.0.1:4200` con backend SQLite en `~/.prefect/` (100% gratuito y sin nube).
+
+---
+
+### 11.2. Las 4 Fases Consolidadas del Plan de Migración a Prefect
+
+| Fase del Plan | Objetivo Técnico | Estado y Consolidación |
+| :---: | :--- | :---: |
+| **Fase 1: Entorno y Verificación Local** | Instalación de Prefect 3.9+, configuración de perfil local `PREFECT_API_URL="http://127.0.0.1:4200/api"`, base de datos SQLite y script `scripts/start_prefect.bat`. | 🟢 **Consolidado v3.0.0** |
+| **Fase 2: Modelos Pydantic y Tareas Atómicas** | Creación de `models.py` fuertemente tipado y tareas modulares (`safety`, `training`, `evaluation`, `gate`, `mutation`, `telemetry`). | 🟢 **Consolidado v3.0.0** |
+| **Fase 3: Flujos Curriculares y Pruebas Unitarias** | Creación de `phase_flow.py`, `curriculum_flow.py`, CLI `runner.py` y suite de tests `curriculums/tests/test_prefect_orchestration.py` con test harness aislado. | 🟢 **Consolidado v3.0.0** |
+| **Fase 4: Integración MLOps y Descomisionamiento .ps1** | Publicación directa a DuckDB/Parquet (:8778), archivo de scripts PowerShell obsoletos en `legacy_archive/powershell_orchestration/` y documentación canónica. | 🟢 **Consolidado v3.0.0** |
+
+---
+
+## 12. Marco Matemático de Conformado de Recompensas (PBRS) y Gobernanza por Turnos
+
+Para resolver el problema del aprendizaje con recompensas dispersas sin alterar el conjunto de políticas óptimas del wargame (teorema de Ng et al., 1999), la capa `voec_sim/core/reward_calculator.py` implementa un andamiaje matemático estricto:
+
+### 12.1. Potencial Radial a VPs ($\Phi$) e Invariancia Telescópica
+El potencial del estado respecto a los Puntos de Victoria se define como:
+$$\Phi(s) = \sum_{u \in \text{Amigos}} \frac{w_u}{1 + \min_{\text{VP}} d(u, \text{VP})} + B_{\text{ctrl}} \cdot N_{\text{VP\_Controlados}}$$
+donde $w_u$ pondera el rol táctico de la unidad (ej. $+25\%$ para unidades de choque `SPEARHEAD`) y $B_{\text{ctrl}} = 2.0$ bonifica el control efectivo.
+
+La función de recompensa adicional por paso satisface:
+$$F(s, a, s') = \gamma \Phi(s') - \Phi(s)$$
+Garantizando que al final del episodio la suma acumulada sea telescópica $\sum_{t=0}^T \gamma^t F(s_t, a_t, s_{t+1}) = -\Phi(s_0)$ (ya que en estado terminal $\Phi(s_T) \equiv 0.0$), preservando al 100% las garantías de convergencia óptima.
+
+### 12.2. Factor de Presión Temporal Dinámica ($\Psi_{\text{urgency}}$)
+Siguiendo la extensión de PBRS para MDPs dependientes del tiempo (Devlin & Kudenko, 2012), cuando el bando amigo controla $0$ VPs, el potencial de distancia se atenúa exponencialmente conforme avanza el horizonte de la batalla ($\tau = t / T_{\text{max}}$):
+$$\Phi(s, t) = \Phi_{\text{dist}}(s) \cdot \exp\left(-\lambda \cdot \frac{t}{T_{\text{max}}}\right)$$
+con $\lambda = 1.2$. Esto introduce una severa degradación en el valor del estado si la fuerza amiga deambula o se retrasa, incentivando una agresión inmediata y decisiva hacia los objetivos.
+
+### 12.3. Penalización Acumulativa por Parálisis de Unidades Expuestas
+Cualquier unidad que permanezca en terreno desprovisto de cobertura defensiva (`cover < 0.35`) fuera del perímetro de un VP controlado, y que pase el turno sin avanzar hacia un objetivo ni abrir fuego, incurre en una penalización por parálisis:
+$$\text{Penalty}_{\text{paralysis}} = -w_{\text{paralysis}} \cdot \left(1.0 + 0.5 \cdot \min(4, \text{streak} - 1)\right)$$
+* La racha acumula un $+50\%$ adicional por cada turno de pasividad consecutiva (hasta $4\times$).
+* Se resetea de forma inmediata a cero en cuanto la unidad realiza una maniobra de aproximación a un VP, abre fuego o entra en una posición con cobertura defensiva adecuada.
+
+---
+
+### 12.4. Presupuesto Dinámico de Simulación y Horizonte Gobernado por Turnos con Refuerzos (Turn-Authoritative Episode Horizon) [v2.5.12]
+
+#### 1. Diagnóstico del Problema: Desincronización entre Pasos RL y Turnos de Wargame
+En el diseño clásico de aprendizaje por refuerzo (RL), los episodios suelen truncarse mediante un número fijo de micro-pasos de decisión (`max_steps`). En versiones previas del autojuego (`selfplay.py`), el presupuesto efectivo se estimaba al inicio del episodio ($t=0$) mediante una fórmula estática:
+$$\text{effective\_max\_steps} = \text{scenario\_turns} \times \text{unit\_count}$$
+
+Esta formulación colapsaba críticamente ante dos realidades del wargame táctico:
+1. **Llegada Dinámica de Refuerzos (Fase de Organización)**: En escenarios como *Mettete i piedi per terra!* (Gela), el bando atacante inicia en Turno 1 con solo 7 unidades (Ola 1). En el Turno 2 desembarca la Ola 2 (+7 unidades), duplicando el número de activaciones por turno. Al medir `unit_count` solo en $t=0$, el presupuesto de pasos se agotaba prematuramente hacia el Turno 4 o 5 de 8.
+2. **Falsos Timeouts y Castigo Catastrófico**: Cuando el bucle de autojuego agotaba los pasos asignados sin que el motor de wargame hubiera concluido (`not adapter.terminal()`), el sistema aplicaba una penalización catastrófica de timeout (-1.0). El agente aprendía una **parálisis defensiva espuria**, concluyendo que avanzar hacia los VPs era inútil porque el reloj de pasos siempre lo ejecutaba antes de poder jugar los 8 turnos reglamentarios.
+
+#### 2. Arquitectura de Gobernanza por Turnos (Turn-Authoritative Execution)
+Para alinear 100% la simulación con el reglamento canónico de Assault, se establece la gobernanza autoritativa por turnos:
+
+```mermaid
+flowchart TD
+    subgraph Engine["Wargame Engine (assault_model / voec_sim)"]
+        direction TB
+        T["Turno T <= T_max"] --> ACT["Fase de Acción (Alternancia de Activaciones)"]
+        ACT --> ADV{"¿Todas las unidades elegibles han actuado?"}
+        ADV -- SÍ --> NEXT_TURN["advance_turn() -> T = T + 1"]
+        NEXT_TURN --> REINF["Fase de Organización: Despliegue de Refuerzos Programados"]
+        REINF --> CHECK_TERM{"¿T > T_max o Victoria/Eliminación?"}
+        CHECK_TERM -- SÍ --> DONE["state.done = True | adapter.terminal() == True"]
+        CHECK_TERM -- NO --> ACT
+    end
+
+    subgraph SelfPlay["Autojuego y Simulación (EfficientZero V2)"]
+        direction TB
+        START["Iniciar Episodio"] --> LOOP["Bucle de Simulación: while not adapter.terminal()"]
+        LOOP --> STEP["MCTS Inferencia -> adapter.apply(action)"]
+        STEP --> WD{"Watchdog por Turno:
+steps_in_turn > max(30, alive * 4)"}
+        WD -- SÍ (Deadlock) --> DEADLOCK["Abortar por Deadlock:
+terminal_reason = turn_deadlock_watchdog
+Penalización Timeout"]
+        WD -- NO --> DONE_CHECK{"¿done / terminal?"}
+        DONE_CHECK -- SÍ --> CANONICAL_EVAL["Evaluación de Resultado Canónico
+(Puntos VP / Casualties / Score)
+Sin penalización espuria"]
+        DONE_CHECK -- NO --> LOOP
+    end
+```
+
+#### 3. Componentes Implementados
+1. **Cálculo del OOB Total (`scenario_total_units`)**:
+   Tanto en `VOECSimulator` como en `EZV2VOECAdapter`, se inspecciona el catálogo del escenario para computar la totalidad de unidades iniciales más todas las oleadas de refuerzos programadas:
+   $$\text{total\_units} = N_{\text{initial}} + \sum_{\text{wave} \in \mathcal{R}} |\text{wave.units}|$$
+   El presupuesto efectivo se escala con respecto a este OOB integral:
+   $$\text{effective\_max\_steps} = \lceil T_{\text{scenario}} \times \text{total\_units} \times \text{steps\_per\_unit\_turn} \rceil$$
+
+2. **Headroom Táctico por Activación (`steps_per_unit_turn = 2.5`)**:
+   Cada unidad en Assault puede requerir múltiples micro-pasos de decisión por ciclo de activación (movimiento, ventana de fuego de reacción enemiga, disparo propio, acción rápida). Un multiplicador de $2.5\times$ garantiza suficiente margen para maniobra compleja sin ahogar al agente.
+
+3. **Watchdog de Deadlock por Turno (`turn_deadlock_watchdog`)**:
+   Para proteger la simulación de bucles patológicos infinitos (ej. dos unidades pasando turno indefinidamente en un estancamiento) sin cortar turnos legítimos:
+   - Al inicio de cada turno de wargame, se reinicia el contador de pasos: `steps_in_current_turn = 0`.
+   - Se establece un techo específico para el turno: $\text{max\_steps\_per\_turn} = \max(30, N_{\text{alive}} \times 4)$.
+   - Si se supera este techo dentro de un único turno, se marca `terminal_reason = "turn_deadlock_watchdog"` y se aborta el episodio. Partidas que fluyen con normalidad avanzan de turno en turno sin verse afectadas.
+
+4. **Preservación del Resultado Canónico al Alcanzar $T_{\max}$**:
+   Al alcanzar $T > T_{\max}$, el motor marca `adapter.terminal() == True`. En este caso, la partida concluye con su evaluación de victoria/derrota legítima por control de VPs y bajas, **sin** aplicar la penalización catastrófica de timeout (-1.0).
